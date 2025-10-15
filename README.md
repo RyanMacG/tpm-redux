@@ -10,49 +10,160 @@ TPM Redux is a modern, performance-focused reimplementation of [TPM (Tmux Plugin
 
 ## Status
 
-🚧 **Work in Progress** - This project is in active development.
-
-## Goals
-
-- **100% TPM Compatibility**: Drop-in replacement for existing TPM installations
-- **Performance**: Parallel plugin operations and optimized parsing
-- **Lightweight**: Minimal dependencies, efficient bash implementation
-- **Enhanced Features**: Plugin search, lock files, better diagnostics
-- **Well-Tested**: Comprehensive test suite with TDD methodology
+✅ **Alpha** - Core functionality is working and ready for testing!
 
 ## Features
 
-### Current (v0.1)
-- Project structure and testing framework
+### Current (v0.3)
+- ✅ Plugin installation (`prefix + I`)
+- ✅ Automatic plugin sourcing
+- ✅ Config parsing (all TPM formats)
+- ✅ Branch specification support
+- ✅ XDG config path support
+- ✅ 63 passing tests
 
-### Planned
-- Core plugin management (install, update, clean)
+### Coming Soon
+- Plugin updates (`prefix + U`)
+- Plugin cleanup (`prefix + Alt+u`)
 - Parallel plugin operations
 - Plugin search and discovery
-- Lock file support for reproducible installations
-- Improved error messages and diagnostics
+- Lock file support
+
+## Requirements
+
+- tmux 1.9 or higher
+- git
+- bash
 
 ## Installation
 
-_Installation instructions coming soon_
+### Quick Install
 
-## Usage
-
-TPM Redux maintains the same usage as TPM:
+Clone TPM Redux to your tmux plugins directory:
 
 ```bash
-# In ~/.tmux.conf
-set -g @plugin 'tmux-plugins/tpm'
-set -g @plugin 'tmux-plugins/tmux-sensible'
+git clone https://github.com/RyanMacG/tpm-redux.git ~/.tmux/plugins/tpm-redux
+```
 
-# Initialize TPM Redux
+### Configure tmux
+
+Add this to the **bottom** of `~/.tmux.conf` (or `~/.config/tmux/tmux.conf`):
+
+```bash
+# List your plugins
+set -g @plugin 'tmux-plugins/tmux-sensible'
+set -g @plugin 'tmux-plugins/tmux-yank'
+
+# Initialize TPM Redux (keep this line at the very bottom)
 run '~/.tmux/plugins/tpm-redux/tpm'
 ```
 
-Key bindings:
-- `prefix + I` - Install plugins
-- `prefix + U` - Update plugins
-- `prefix + alt + u` - Uninstall plugins not in config
+### Activate
+
+Reload tmux configuration:
+
+```bash
+# From inside tmux, press:
+#   prefix + :
+# Then type:
+#   source ~/.tmux.conf
+
+# Or from terminal:
+tmux source ~/.tmux.conf
+```
+
+### Install Plugins
+
+Inside tmux, press:
+```
+prefix + I
+```
+
+Your plugins will be cloned and loaded automatically!
+
+## Usage
+
+### Key Bindings
+
+- `prefix + I` - **Install** new plugins and refresh tmux
+- `prefix + U` - **Update** plugins (coming soon)
+- `prefix + Alt + u` - **Clean** unused plugins (coming soon)
+
+### Plugin Formats
+
+TPM Redux supports all TPM plugin formats:
+
+```bash
+# GitHub shorthand
+set -g @plugin 'tmux-plugins/tmux-sensible'
+
+# GitHub shorthand with branch
+set -g @plugin 'tmux-plugins/tmux-yank#v2.3.0'
+
+# Full git URL
+set -g @plugin 'https://github.com/tmux-plugins/tmux-sensible.git'
+
+# SSH URL
+set -g @plugin 'git@github.com:tmux-plugins/tmux-sensible.git'
+```
+
+### Example Configuration
+
+```bash
+# ~/.tmux.conf
+
+# Basic settings
+set -g mouse on
+set -g default-terminal "screen-256color"
+
+# Plugins
+set -g @plugin 'tmux-plugins/tmux-sensible'
+set -g @plugin 'tmux-plugins/tmux-yank'
+set -g @plugin 'tmux-plugins/tmux-resurrect'
+
+# Plugin settings (if any)
+set -g @resurrect-capture-pane-contents 'on'
+
+# Initialize TPM Redux (keep at bottom!)
+run '~/.tmux/plugins/tpm-redux/tpm'
+```
+
+### Manual Installation
+
+You can also install plugins from the command line:
+
+```bash
+# Install all plugins from config
+~/.tmux/plugins/tpm-redux/bin/install
+```
+
+## Troubleshooting
+
+### Plugins not installing?
+
+1. Check that git is installed: `git --version`
+2. Check tmux version: `tmux -V` (must be 1.9+)
+3. Verify TPM Redux is sourced in `.tmux.conf`
+4. Try reloading tmux: `tmux source ~/.tmux.conf`
+5. Check for errors: `tmux show-messages`
+
+### Where are plugins installed?
+
+By default: `~/.tmux/plugins/`
+
+If using XDG config: `~/.config/tmux/plugins/`
+
+### Manual installation not working?
+
+Run the install command directly to see errors:
+
+```bash
+~/.tmux/plugins/tpm-redux/bin/install
+```
+
+### Still having issues?
+
+Check the [tmux-plugins/tpm troubleshooting guide](https://github.com/tmux-plugins/tpm/blob/master/docs/tpm_not_working.md) - most solutions apply to TPM Redux too.
 
 ## Development
 
@@ -62,20 +173,23 @@ We use [bats-core](https://github.com/bats-core/bats-core) for testing:
 
 ```bash
 # Run all tests
-tests/bats/bin/bats tests/
+./run_tests.sh
 
 # Run specific test file
-tests/bats/bin/bats tests/core_test.bats
+./run_tests.sh tests/core_test.bats
 ```
+
+Current test coverage: **63 passing tests**
 
 ### Contributing
 
-We follow a TDD (Test-Driven Development) approach:
-1. Write failing tests (RED)
-2. Implement minimal code to pass (GREEN)
-3. Refactor and optimize (REFACTOR)
+We follow TDD principles with all tests passing before committing. All contributions should:
+- Include comprehensive tests
+- Maintain 100% backwards compatibility with TPM
+- Follow existing code style
+- Update documentation as needed
 
-All contributions should include tests and maintain backwards compatibility with TPM.
+See test files in `tests/` for examples.
 
 ## Compatibility
 
