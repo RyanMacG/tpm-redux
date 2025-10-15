@@ -38,7 +38,7 @@ teardown() {
     git remote add origin "https://github.com/tmux-plugins/tmux-sensible" >/dev/null 2>&1
 
     run install_plugin_with_feedback "tmux-plugins/tmux-sensible"
-    [ "$status" -eq 0 ]
+    [ "$status" -eq 1 ]  # Return code 1 means already installed
     # Should output that it's already installed
     [[ "$output" =~ "Already installed" ]] || [[ "$output" =~ "already" ]]
 }

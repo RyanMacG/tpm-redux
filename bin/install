@@ -44,6 +44,10 @@ format_plugin_output() {
 # Install a single plugin with user feedback
 # Args:
 #   $1 - plugin specification
+# Returns:
+#   0 - success (newly installed)
+#   1 - already installed
+#   2 - error during installation
 install_plugin_with_feedback() {
     local plugin_spec="$1"
     local plugin_name
@@ -55,7 +59,7 @@ install_plugin_with_feedback() {
     # Check if already installed
     if plugin_already_installed "$plugin_spec"; then
         format_plugin_output "$plugin_name" "already_installed"
-        return 0
+        return 1
     fi
 
     # Attempt to clone the plugin
@@ -64,7 +68,7 @@ install_plugin_with_feedback() {
         return 0
     else
         format_plugin_output "$plugin_name" "error"
-        return 1
+        return 2
     fi
 }
 
@@ -100,15 +104,20 @@ install_all_plugins() {
         ((current++))
 
         # Install the plugin
-        if install_plugin_with_feedback "$plugin_spec"; then
-            if plugin_already_installed "$plugin_spec"; then
-                ((skip_count++))
-            else
+        install_plugin_with_feedback "$plugin_spec"
+        local result=$?
+
+        case $result in
+            0)
                 ((success_count++))
-            fi
-        else
-            ((error_count++))
-        fi
+                ;;
+            1)
+                ((skip_count++))
+                ;;
+            *)
+                ((error_count++))
+                ;;
+        esac
     done <<< "$plugins"
 
     # Print summary
