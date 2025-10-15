@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 
 # Keybinding wrapper for updating plugins
-# TODO: Will be implemented in feat/install-command
 
-echo "Update plugins functionality coming soon..."
+CURRENT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+BIN_DIR="$CURRENT_DIR/../bin"
+
+# Run the update command
+"$BIN_DIR/update"
 
