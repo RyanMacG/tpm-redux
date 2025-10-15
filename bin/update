@@ -1,0 +1,151 @@
+#!/usr/bin/env bash
+
+# Plugin update command for TPM Redux
+
+CURRENT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+LIB_DIR="$CURRENT_DIR/../lib"
+
+# Source libraries
+source "$LIB_DIR/core.sh"
+source "$LIB_DIR/git.sh"
+
+# Format output message for a plugin update
+# Args:
+#   $1 - plugin name
+#   $2 - status (success, up_to_date, not_installed, error)
+format_update_output() {
+    local plugin_name="$1"
+    local status="$2"
+
+    case "$status" in
+        success)
+            echo "✓ $plugin_name - updated successfully"
+            ;;
+        up_to_date)
+            echo "→ $plugin_name - already up to date"
+            ;;
+        not_installed)
+            echo "✗ $plugin_name - not installed"
+            ;;
+        error)
+            echo "✗ $plugin_name - update failed"
+            ;;
+        *)
+            echo "  $plugin_name - $status"
+            ;;
+    esac
+}
+
+# Update a single plugin with user feedback
+# Args:
+#   $1 - plugin specification
+# Returns:
+#   0 - success (updated)
+#   1 - up to date (no changes)
+#   2 - not installed
+#   3 - error during update
+update_plugin_with_feedback() {
+    local plugin_spec="$1"
+    local plugin_name
+
+    plugin_name="$(get_plugin_name "$plugin_spec")"
+
+    # Check if plugin is installed
+    if ! plugin_already_installed "$plugin_spec"; then
+        format_update_output "$plugin_name" "not_installed"
+        return 2
+    fi
+
+    # Attempt to update the plugin
+    local update_output
+    update_output=$(update_plugin "$plugin_spec" 2>&1)
+    local update_result=$?
+
+    if [[ $update_result -eq 0 ]]; then
+        # Check if there were actually changes
+        if [[ "$update_output" =~ "Already up to date" ]] || [[ "$update_output" =~ "Already up-to-date" ]]; then
+            format_update_output "$plugin_name" "up_to_date"
+            return 1
+        else
+            format_update_output "$plugin_name" "success"
+            return 0
+        fi
+    else
+        format_update_output "$plugin_name" "error"
+        return 3
+    fi
+}
+
+# Update all plugins from config file
+# Args:
+#   $1 - optional config path (defaults to detected config)
+update_all_plugins() {
+    local config_path="${1:-$(get_tmux_config_path)}"
+    local plugins
+    local total_count
+    local current=0
+    local updated_count=0
+    local up_to_date_count=0
+    local not_installed_count=0
+    local error_count=0
+
+    # Get plugins list
+    plugins="$(parse_plugins "$config_path")"
+    total_count="$(echo "$plugins" | grep -c . || echo 0)"
+
+    # If no plugins, exit early
+    if [[ "$total_count" -eq 0 ]]; then
+        echo "No plugins configured"
+        return 0
+    fi
+
+    echo "Updating $total_count plugin(s)..."
+    echo ""
+
+    # Process each plugin
+    while IFS= read -r plugin_spec; do
+        [[ -z "$plugin_spec" ]] && continue
+
+        ((current++))
+
+        # Update the plugin
+        update_plugin_with_feedback "$plugin_spec"
+        local result=$?
+
+        case $result in
+            0)
+                ((updated_count++))
+                ;;
+            1)
+                ((up_to_date_count++))
+                ;;
+            2)
+                ((not_installed_count++))
+                ;;
+            *)
+                ((error_count++))
+                ;;
+        esac
+    done <<< "$plugins"
+
+    # Print summary
+    echo ""
+    echo "Update complete:"
+    echo "  ✓ Updated: $updated_count"
+    echo "  → Already up to date: $up_to_date_count"
+    if [[ $not_installed_count -gt 0 ]]; then
+        echo "  ✗ Not installed: $not_installed_count"
+    fi
+    if [[ $error_count -gt 0 ]]; then
+        echo "  ✗ Failed: $error_count"
+    fi
+
+    # Return success if no errors or not installed
+    [[ $error_count -eq 0 ]] && [[ $not_installed_count -eq 0 ]]
+}
+
+# Main execution (unless sourced for tests)
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    update_all_plugins "$@"
+fi
+
