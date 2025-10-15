@@ -1,0 +1,131 @@
+#!/usr/bin/env bash
+
+# Plugin installation command for TPM Redux
+
+CURRENT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+LIB_DIR="$CURRENT_DIR/../lib"
+
+# Source libraries
+source "$LIB_DIR/core.sh"
+source "$LIB_DIR/git.sh"
+
+# Count total number of plugins in config
+# Args:
+#   $1 - config file path
+count_plugins() {
+    local config="$1"
+    parse_plugins "$config" | wc -l | tr -d ' '
+}
+
+# Format output message for a plugin
+# Args:
+#   $1 - plugin name
+#   $2 - status (success, already_installed, error)
+format_plugin_output() {
+    local plugin_name="$1"
+    local status="$2"
+
+    case "$status" in
+        success)
+            echo "✓ $plugin_name - installed successfully"
+            ;;
+        already_installed)
+            echo "→ $plugin_name - already installed"
+            ;;
+        error)
+            echo "✗ $plugin_name - installation failed"
+            ;;
+        *)
+            echo "  $plugin_name - $status"
+            ;;
+    esac
+}
+
+# Install a single plugin with user feedback
+# Args:
+#   $1 - plugin specification
+install_plugin_with_feedback() {
+    local plugin_spec="$1"
+    local plugin_name
+    local branch
+
+    plugin_name="$(get_plugin_name "$plugin_spec")"
+    branch="$(get_plugin_branch "$plugin_spec")"
+
+    # Check if already installed
+    if plugin_already_installed "$plugin_spec"; then
+        format_plugin_output "$plugin_name" "already_installed"
+        return 0
+    fi
+
+    # Attempt to clone the plugin
+    if clone_plugin "$plugin_spec" "$branch" >/dev/null 2>&1; then
+        format_plugin_output "$plugin_name" "success"
+        return 0
+    else
+        format_plugin_output "$plugin_name" "error"
+        return 1
+    fi
+}
+
+# Install all plugins from config file
+# Args:
+#   $1 - optional config path (defaults to detected config)
+install_all_plugins() {
+    local config_path="${1:-$(get_tmux_config_path)}"
+    local plugins
+    local total_count
+    local current=0
+    local success_count=0
+    local skip_count=0
+    local error_count=0
+
+    # Get plugins list
+    plugins="$(parse_plugins "$config_path")"
+    total_count="$(count_plugins "$config_path")"
+
+    # If no plugins, exit early
+    if [[ "$total_count" -eq 0 ]]; then
+        echo "No plugins configured"
+        return 0
+    fi
+
+    echo "Installing $total_count plugin(s)..."
+    echo ""
+
+    # Process each plugin
+    while IFS= read -r plugin_spec; do
+        [[ -z "$plugin_spec" ]] && continue
+
+        ((current++))
+
+        # Install the plugin
+        if install_plugin_with_feedback "$plugin_spec"; then
+            if plugin_already_installed "$plugin_spec"; then
+                ((skip_count++))
+            else
+                ((success_count++))
+            fi
+        else
+            ((error_count++))
+        fi
+    done <<< "$plugins"
+
+    # Print summary
+    echo ""
+    echo "Installation complete:"
+    echo "  ✓ Installed: $success_count"
+    echo "  → Already installed: $skip_count"
+    if [[ $error_count -gt 0 ]]; then
+        echo "  ✗ Failed: $error_count"
+    fi
+
+    # Return success if no errors
+    [[ $error_count -eq 0 ]]
+}
+
+# Main execution (unless sourced for tests)
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    install_all_plugins "$@"
+fi
+
