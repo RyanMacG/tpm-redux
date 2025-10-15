@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+
+# Keybinding wrapper for cleaning unused plugins
+# TODO: Will be implemented in feat/clean-command
+
+echo "Clean plugins functionality coming soon..."
+
