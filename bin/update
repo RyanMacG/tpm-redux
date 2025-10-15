@@ -47,10 +47,8 @@ format_update_output() {
 update_plugin_with_feedback() {
     local plugin_spec="$1"
     local plugin_name
-    local plugin_path
 
     plugin_name="$(get_plugin_name "$plugin_spec")"
-    plugin_path="$(get_plugin_path "$plugin_spec")"
 
     # Check if plugin is installed
     if ! plugin_already_installed "$plugin_spec"; then
