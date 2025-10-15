@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+
+# Keybinding wrapper for updating plugins
+# TODO: Will be implemented in feat/install-command
+
+echo "Update plugins functionality coming soon..."
+
