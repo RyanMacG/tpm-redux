@@ -1,0 +1,21 @@
+# Test outputs and temporary files
+tests/.bats-cache/
+*.tmp
+*.log
+
+# macOS
+.DS_Store
+
+# Test temp directories
+/tmp/tpm-redux-test-*/
+
+# Editor files
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+
+# Plugin test installations
+test_plugins/
+
