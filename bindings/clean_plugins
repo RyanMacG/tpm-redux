@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 
 # Keybinding wrapper for cleaning unused plugins
-# TODO: Will be implemented in feat/clean-command
 
-echo "Clean plugins functionality coming soon..."
+CURRENT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+BIN_DIR="$CURRENT_DIR/../bin"
+
+# Run the clean command
+"$BIN_DIR/clean"
 

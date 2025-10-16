@@ -1,0 +1,162 @@
+#!/usr/bin/env bash
+
+# Plugin cleanup command for TPM Redux
+
+CURRENT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+LIB_DIR="$CURRENT_DIR/../lib"
+
+# Source libraries
+source "$LIB_DIR/core.sh"
+source "$LIB_DIR/git.sh"
+
+# Get list of installed plugin directories
+get_installed_plugins() {
+    local tpm_path
+    tpm_path="$(get_tpm_path)"
+
+    if [[ ! -d "$tpm_path" ]]; then
+        return 0
+    fi
+
+    # List directories in plugin path
+    find "$tpm_path" -mindepth 1 -maxdepth 1 -type d -exec basename {} \;
+}
+
+# Get list of plugins that should be removed
+# Args:
+#   $1 - config file path
+get_plugins_to_remove() {
+    local config_path="$1"
+    local installed_plugins
+    local configured_plugins
+    local configured_plugin_names=""
+
+    # Get configured plugins
+    configured_plugins="$(parse_plugins "$config_path")"
+
+    # Extract plugin names from specs
+    while IFS= read -r plugin_spec; do
+        [[ -z "$plugin_spec" ]] && continue
+        local plugin_name
+        plugin_name="$(get_plugin_name "$plugin_spec")"
+        configured_plugin_names="$configured_plugin_names$plugin_name"$'\n'
+    done <<< "$configured_plugins"
+
+    # Get installed plugins
+    installed_plugins="$(get_installed_plugins)"
+
+    # Find plugins that are installed but not configured
+    while IFS= read -r installed_plugin; do
+        [[ -z "$installed_plugin" ]] && continue
+
+        # Don't remove tpm-redux or tpm (plugin managers)
+        if [[ "$installed_plugin" == "tpm-redux" ]] || [[ "$installed_plugin" == "tpm" ]]; then
+            continue
+        fi
+
+        # Check if this plugin is in configured list
+        if ! echo "$configured_plugin_names" | grep -qx "$installed_plugin"; then
+            echo "$installed_plugin"
+        fi
+    done <<< "$installed_plugins"
+}
+
+# Format output message for a plugin removal
+# Args:
+#   $1 - plugin name
+#   $2 - status (success, error)
+format_clean_output() {
+    local plugin_name="$1"
+    local status="$2"
+
+    case "$status" in
+        success)
+            echo "✓ $plugin_name - removed"
+            ;;
+        error)
+            echo "✗ $plugin_name - removal failed"
+            ;;
+        *)
+            echo "  $plugin_name - $status"
+            ;;
+    esac
+}
+
+# Remove a single plugin
+# Args:
+#   $1 - plugin name
+# Returns:
+#   0 - success
+#   1 - error
+remove_plugin() {
+    local plugin_name="$1"
+    local tpm_path
+    local plugin_path
+
+    tpm_path="$(get_tpm_path)"
+    plugin_path="${tpm_path%/}/${plugin_name}"
+
+    if [[ ! -d "$plugin_path" ]]; then
+        return 1
+    fi
+
+    rm -rf "$plugin_path"
+    return $?
+}
+
+# Clean all unused plugins
+# Args:
+#   $1 - optional config path (defaults to detected config)
+clean_plugins() {
+    local config_path="${1:-$(get_tmux_config_path)}"
+    local plugins_to_remove
+    local removed_count=0
+    local error_count=0
+
+    # Get list of plugins to remove
+    plugins_to_remove="$(get_plugins_to_remove "$config_path")"
+
+    # Count plugins (handle empty string)
+    local total_count=0
+    if [[ -n "$plugins_to_remove" ]]; then
+        total_count="$(echo "$plugins_to_remove" | wc -l | tr -d ' ')"
+    fi
+
+    if [[ "$total_count" -eq 0 ]]; then
+        echo "No unused plugins to remove"
+        return 0
+    fi
+
+    echo "Removing $total_count unused plugin(s)..."
+    echo ""
+
+    # Remove each plugin
+    while IFS= read -r plugin_name; do
+        [[ -z "$plugin_name" ]] && continue
+
+        if remove_plugin "$plugin_name"; then
+            format_clean_output "$plugin_name" "success"
+            ((removed_count++))
+        else
+            format_clean_output "$plugin_name" "error"
+            ((error_count++))
+        fi
+    done <<< "$plugins_to_remove"
+
+    # Print summary
+    echo ""
+    echo "Cleanup complete:"
+    echo "  ✓ Removed: $removed_count"
+    if [[ $error_count -gt 0 ]]; then
+        echo "  ✗ Failed: $error_count"
+    fi
+
+    # Return success if no errors
+    [[ $error_count -eq 0 ]]
+}
+
+# Main execution (unless sourced for tests)
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    clean_plugins "$@"
+fi
+
