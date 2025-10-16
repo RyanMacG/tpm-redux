@@ -6,28 +6,38 @@
 
 ## Overview
 
-TPM Redux is a modern, performance-focused reimplementation of [TPM (Tmux Plugin Manager)](https://github.com/tmux-plugins/tpm) with 100% backwards compatibility. It maintains the same plugin format and API while adding parallel operations, better error handling, and plugin discovery features.
+TPM Redux is a modern, performance-focused reimplementation of [TPM (Tmux Plugin Manager)](https://github.com/tmux-plugins/tpm) with 100% backwards compatibility. It maintains the same plugin format and API while providing a cleaner codebase, comprehensive test coverage, and a foundation for enhanced features.
+
+### Why TPM Redux?
+
+- 🚀 **Drop-in replacement** - Works with your existing `.tmux.conf`, no changes needed
+- ✅ **Well-tested** - 84 tests covering all functionality
+- 📦 **Modern codebase** - Clean, maintainable bash with proper error handling
+- 🔄 **Active development** - Built with future enhancements in mind
+- 📖 **Comprehensive docs** - Clear installation and usage instructions
 
 ## Status
 
-✅ **Alpha** - Core functionality is working and ready for testing!
+🎉 **v1.0 - Stable** - Production ready with 100% TPM feature parity!
 
 ## Features
 
-### Current (v0.3)
-- ✅ Plugin installation (`prefix + I`)
-- ✅ Automatic plugin sourcing
-- ✅ Config parsing (all TPM formats)
-- ✅ Branch specification support
-- ✅ XDG config path support
-- ✅ 63 passing tests
+### Core Functionality
+- ✅ **Plugin installation** - Install plugins with `prefix + I`
+- ✅ **Plugin updates** - Update all plugins with `prefix + U`
+- ✅ **Plugin cleanup** - Remove unused plugins with `prefix + Alt+u`
+- ✅ **Automatic plugin sourcing** - Plugins load automatically on tmux start
+- ✅ **All TPM config formats** - GitHub shorthand, full URLs, SSH, branches
+- ✅ **XDG config support** - Works with both `~/.tmux.conf` and `~/.config/tmux/tmux.conf`
+- ✅ **Branch specification** - Install specific versions with `user/repo#branch`
+- ✅ **100% TPM compatible** - Drop-in replacement for existing TPM installations
+- ✅ **84 passing tests** - Comprehensive test coverage
 
-### Coming Soon
-- Plugin updates (`prefix + U`)
-- Plugin cleanup (`prefix + Alt+u`)
-- Parallel plugin operations
+### Enhanced Features (Coming Soon)
+- Parallel plugin operations for faster installs/updates
 - Plugin search and discovery
-- Lock file support
+- Lock file support for reproducible installations
+- Enhanced error messages and diagnostics
 
 ## Requirements
 
@@ -85,9 +95,11 @@ Your plugins will be cloned and loaded automatically!
 
 ### Key Bindings
 
+All keybindings are fully functional:
+
 - `prefix + I` - **Install** new plugins and refresh tmux
-- `prefix + U` - **Update** plugins (coming soon)
-- `prefix + Alt + u` - **Clean** unused plugins (coming soon)
+- `prefix + U` - **Update** all installed plugins
+- `prefix + Alt + u` - **Clean** unused plugins (removes plugins not in config)
 
 ### Plugin Formats
 
@@ -179,7 +191,7 @@ We use [bats-core](https://github.com/bats-core/bats-core) for testing:
 ./run_tests.sh tests/core_test.bats
 ```
 
-Current test coverage: **63 passing tests**
+Current test coverage: **84 passing tests** (100% of implemented features)
 
 ### Contributing
 
@@ -202,7 +214,22 @@ TPM Redux aims for 100% compatibility with TPM, supporting:
 
 ## Migration from TPM
 
-TPM Redux is designed as a drop-in replacement. Simply replace your TPM installation with TPM Redux - no configuration changes required.
+TPM Redux is designed as a drop-in replacement for TPM. Migration is simple:
+
+1. **Backup** (optional): `cp -r ~/.tmux/plugins/tpm ~/.tmux/plugins/tpm.backup`
+2. **Replace**: `rm -rf ~/.tmux/plugins/tpm && git clone https://github.com/RyanMacG/tpm-redux.git ~/.tmux/plugins/tpm`
+3. **Or run alongside**: Keep TPM as `tpm` and install TPM Redux as `tpm-redux`
+
+No configuration changes needed - your existing `.tmux.conf` works as-is!
+
+## Release Notes
+
+### v1.0.0 (Current)
+- ✅ Complete TPM feature parity
+- ✅ All core commands implemented (install, update, clean)
+- ✅ 84 comprehensive tests
+- ✅ Full backwards compatibility
+- ✅ Production ready
 
 ## License
 
