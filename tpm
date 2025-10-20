@@ -114,17 +114,40 @@ source_all_plugins() {
 
 # Set up keybindings for plugin management
 setup_keybindings() {
+    local tmux_version
+    tmux_version="$(tmux -V | cut -d' ' -f2)"
+    
+    # Determine display method based on tmux version
+    local use_popup=false
+    if version_greater_or_equal "$tmux_version" "3.2"; then
+        use_popup=true
+    fi
+    
     # Install plugins: prefix + I
     local install_key="${TPM_INSTALL_KEY:-$DEFAULT_INSTALL_KEY}"
-    tmux bind-key "$install_key" run-shell "$BINDINGS_DIR/install_plugins" 2>/dev/null || true
+    if [[ "$use_popup" == true ]]; then
+        # Popup: floating window, nicer UX for modern tmux
+        tmux bind-key "$install_key" display-popup -E -w 80% -h 75% "$BINDINGS_DIR/install_plugins" 2>/dev/null || true
+    else
+        # Split pane: works on all tmux versions >= 1.9
+        tmux bind-key "$install_key" split-window -v -p 30 "$BINDINGS_DIR/install_plugins" 2>/dev/null || true
+    fi
 
     # Update plugins: prefix + U
     local update_key="${TPM_UPDATE_KEY:-$DEFAULT_UPDATE_KEY}"
-    tmux bind-key "$update_key" run-shell "$BINDINGS_DIR/update_plugins" 2>/dev/null || true
+    if [[ "$use_popup" == true ]]; then
+        tmux bind-key "$update_key" display-popup -E -w 80% -h 75% "$BINDINGS_DIR/update_plugins" 2>/dev/null || true
+    else
+        tmux bind-key "$update_key" split-window -v -p 30 "$BINDINGS_DIR/update_plugins" 2>/dev/null || true
+    fi
 
     # Clean plugins: prefix + Alt+u
     local clean_key="${TPM_CLEAN_KEY:-$DEFAULT_CLEAN_KEY}"
-    tmux bind-key "$clean_key" run-shell "$BINDINGS_DIR/clean_plugins" 2>/dev/null || true
+    if [[ "$use_popup" == true ]]; then
+        tmux bind-key "$clean_key" display-popup -E -w 80% -h 75% "$BINDINGS_DIR/clean_plugins" 2>/dev/null || true
+    else
+        tmux bind-key "$clean_key" split-window -v -p 30 "$BINDINGS_DIR/clean_plugins" 2>/dev/null || true
+    fi
 }
 
 # Main initialization
