@@ -56,10 +56,16 @@ update_plugin_with_feedback() {
         return 2
     fi
 
+    # Show immediate feedback that update is starting
+    echo -n "  Updating $plugin_name..."
+
     # Attempt to update the plugin
     local update_output
     update_output=$(update_plugin "$plugin_spec" 2>&1)
     local update_result=$?
+
+    # Clear the "Updating..." line and show result
+    echo -ne "\r\033[K"  # Clear line
 
     if [[ $update_result -eq 0 ]]; then
         # Check if there were actually changes
