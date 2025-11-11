@@ -18,7 +18,7 @@ TPM Redux is a modern, performance-focused reimplementation of [TPM (Tmux Plugin
 
 ## Status
 
-🎉 **v1.1.1 - Stable** - Production ready with 100% TPM feature parity!
+🎉 **v1.1.2 - Stable** - Production ready with 100% TPM feature parity!
 
 ## Features
 
@@ -224,7 +224,13 @@ No configuration changes needed - your existing `.tmux.conf` works as-is!
 
 ## Release Notes
 
-### v1.1.1 (Current)
+### v1.1.2 (Current)
+- 🐛 Fix: Improved color detection for tmux popups
+  - Colors now work correctly in tmux popups with xterm-256color
+  - Fixed color detection when stdout is not a TTY
+  - Binding script always exits with 0 to prevent false error messages
+
+### v1.1.1
 - 🐛 Fix: Update command no longer returns error exit code for not-installed plugins
   - Only actual update failures now result in non-zero exit code
   - Prevents false error messages in tmux
