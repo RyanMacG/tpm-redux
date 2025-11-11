@@ -422,8 +422,8 @@ update_all_plugins() {
         echo "  ✗ Failed: $error_count"
     fi
 
-    # Return success if no errors or not installed
-    [[ $error_count -eq 0 ]] && [[ $not_installed_count -eq 0 ]]
+    # Return success if no errors (not installed is not an error)
+    [[ $error_count -eq 0 ]]
 }
 
 # Main execution (unless sourced for tests)
