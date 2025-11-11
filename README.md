@@ -11,14 +11,14 @@ TPM Redux is a modern, performance-focused reimplementation of [TPM (Tmux Plugin
 ### Why TPM Redux?
 
 - 🚀 **Drop-in replacement** - Works with your existing `.tmux.conf`, no changes needed
-- ✅ **Well-tested** - 84 tests covering all functionality
+- ✅ **Well-tested** - 93 tests covering all functionality
 - 📦 **Modern codebase** - Clean, maintainable bash with proper error handling
 - 🔄 **Active development** - Built with future enhancements in mind
 - 📖 **Comprehensive docs** - Clear installation and usage instructions
 
 ## Status
 
-🎉 **v1.0 - Stable** - Production ready with 100% TPM feature parity!
+🎉 **v1.1 - Stable** - Production ready with 100% TPM feature parity!
 
 ## Features
 
@@ -31,13 +31,13 @@ TPM Redux is a modern, performance-focused reimplementation of [TPM (Tmux Plugin
 - ✅ **XDG config support** - Works with both `~/.tmux.conf` and `~/.config/tmux/tmux.conf`
 - ✅ **Branch specification** - Install specific versions with `user/repo#branch`
 - ✅ **100% TPM compatible** - Drop-in replacement for existing TPM installations
-- ✅ **84 passing tests** - Comprehensive test coverage
+- ✅ **93 passing tests** - Comprehensive test coverage
+- ✅ **Commit display UI** - See what changed in updated plugins with commit hashes, messages, and relative times (inspired by lazy.nvim)
 
 ### Enhanced Features (Coming Soon)
 - Parallel plugin operations for faster installs/updates
 - Plugin search and discovery
 - Lock file support for reproducible installations
-- Enhanced error messages and diagnostics
 
 ## Requirements
 
@@ -191,7 +191,7 @@ We use [bats-core](https://github.com/bats-core/bats-core) for testing:
 ./run_tests.sh tests/core_test.bats
 ```
 
-Current test coverage: **84 passing tests** (100% of implemented features)
+Current test coverage: **93 passing tests** (100% of implemented features)
 
 ### Contributing
 
@@ -224,7 +224,15 @@ No configuration changes needed - your existing `.tmux.conf` works as-is!
 
 ## Release Notes
 
-### v1.0.0 (Current)
+### v1.1.0 (Current)
+- ✅ Commit display UI - Shows commit information for updated plugins
+  - Displays commit hashes, messages, and relative times
+  - Colourised output (green for updated, yellow for up-to-date, red for errors)
+  - Shows all new commits since last update
+  - Inspired by lazy.nvim's commit display
+- ✅ 93 comprehensive tests (added 9 new tests for commit display features)
+
+### v1.0.0
 - ✅ Complete TPM feature parity
 - ✅ All core commands implemented (install, update, clean)
 - ✅ 84 comprehensive tests
