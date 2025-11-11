@@ -272,8 +272,10 @@ display_commit_summary() {
     fi
 
     echo ""
-    local colour_header="$(colour_green)"
-    local colour_reset_code="$(colour_reset)"
+    local colour_header
+    local colour_reset_code
+    colour_header="$(colour_green)"
+    colour_reset_code="$(colour_reset)"
     echo "${colour_header}Updated (${updated_count})${colour_reset_code}"
     echo ""
 
