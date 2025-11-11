@@ -22,17 +22,22 @@ terminal_supports_colours() {
         # Check for common colour-capable terminals
         case "$TERM" in
             xterm*|rxvt*|screen*|tmux*|linux|ansi|*color*)
-                # If TERM indicates tmux/screen, always allow colors
-                # (tmux popups may not have TMUX env var set)
-                if [[ "$TERM" == *"tmux"* ]] || [[ "$TERM" == *"screen"* ]]; then
+                # If we're in tmux or screen (via env var), always allow colors
+                # (tmux popups may redirect stdout, so TTY check fails)
+                if [[ -n "${TMUX:-}" ]] || [[ -n "${STY:-}" ]]; then
                     return 0
                 fi
-                # Check if we're in tmux or screen via environment
-                if [[ -n "${TMUX:-}" ]] || [[ -n "${STY:-}" ]]; then
+                # If TERM explicitly indicates tmux/screen, allow colors
+                if [[ "$TERM" == *"tmux"* ]] || [[ "$TERM" == *"screen"* ]]; then
                     return 0
                 fi
                 # For other terminals, check if stdout is a TTY
                 if [[ -t 1 ]]; then
+                    return 0
+                fi
+                # If TERM contains "color" (like xterm-256color), be permissive
+                # and allow colors even if not a TTY (common in scripts/pipes)
+                if [[ "$TERM" == *"color"* ]]; then
                     return 0
                 fi
                 ;;
