@@ -12,8 +12,8 @@ source "$LIB_DIR/git.sh"
 # Check if terminal supports colours
 # Returns 0 if colours are supported, 1 otherwise
 terminal_supports_colours() {
-    # Check if output is to a TTY
-    if [[ ! -t 1 ]]; then
+    # Check for NO_COLOR environment variable (standard for disabling colours)
+    if [[ -n "${NO_COLOR:-}" ]]; then
         return 1
     fi
 
@@ -22,14 +22,17 @@ terminal_supports_colours() {
         # Check for common colour-capable terminals
         case "$TERM" in
             xterm*|rxvt*|screen*|tmux*|linux|ansi|*color*)
-                return 0
+                # In tmux/screen, we can use colors even if not a direct TTY
+                # Check if we're in tmux or screen
+                if [[ -n "${TMUX:-}" ]] || [[ -n "${STY:-}" ]]; then
+                    return 0
+                fi
+                # For other terminals, check if stdout is a TTY
+                if [[ -t 1 ]]; then
+                    return 0
+                fi
                 ;;
         esac
-    fi
-
-    # Check for NO_COLOR environment variable (standard for disabling colours)
-    if [[ -n "${NO_COLOR:-}" ]]; then
-        return 1
     fi
 
     return 1

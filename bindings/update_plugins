@@ -7,8 +7,13 @@ BIN_DIR="$CURRENT_DIR/../bin"
 
 # Run the update command and wait for user to review results
 "$BIN_DIR/update"
+update_exit_code=$?
 
 echo ""
 echo "press ENTER to close this pane"
 read -r
+
+# Always exit with 0 to prevent tmux error messages
+# The update command's exit code is informational only
+exit 0
 
