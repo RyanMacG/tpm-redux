@@ -9,6 +9,69 @@ LIB_DIR="$CURRENT_DIR/../lib"
 source "$LIB_DIR/core.sh"
 source "$LIB_DIR/git.sh"
 
+# Check if terminal supports colours
+# Returns 0 if colours are supported, 1 otherwise
+terminal_supports_colours() {
+    # Check if output is to a TTY
+    if [[ ! -t 1 ]]; then
+        return 1
+    fi
+
+    # Check if TERM is set and supports colours
+    if [[ -n "${TERM:-}" ]] && [[ "$TERM" != "dumb" ]]; then
+        # Check for common colour-capable terminals
+        case "$TERM" in
+            xterm*|rxvt*|screen*|tmux*|linux|ansi|*color*)
+                return 0
+                ;;
+        esac
+    fi
+
+    # Check for NO_COLOR environment variable (standard for disabling colours)
+    if [[ -n "${NO_COLOR:-}" ]]; then
+        return 1
+    fi
+
+    return 1
+}
+
+# Colour helper functions
+colour_green() {
+    if terminal_supports_colours; then
+        echo -e "\033[0;32m"
+    fi
+}
+
+colour_yellow() {
+    if terminal_supports_colours; then
+        echo -e "\033[0;33m"
+    fi
+}
+
+colour_red() {
+    if terminal_supports_colours; then
+        echo -e "\033[0;31m"
+    fi
+}
+
+colour_blue() {
+    if terminal_supports_colours; then
+        echo -e "\033[0;34m"
+    fi
+}
+
+colour_cyan() {
+    if terminal_supports_colours; then
+        echo -e "\033[0;36m"
+    fi
+}
+
+colour_reset() {
+    if terminal_supports_colours; then
+        echo -e "\033[0m"
+    fi
+}
+
 # Format output message for a plugin update
 # Args:
 #   $1 - plugin name
@@ -39,6 +102,7 @@ format_update_output() {
 # Update a single plugin with user feedback
 # Args:
 #   $1 - plugin specification
+#   $2 - variable name to store commit data (optional, format: old_hash|new_hash|commits)
 # Returns:
 #   0 - success (updated)
 #   1 - up to date (no changes)
@@ -46,9 +110,15 @@ format_update_output() {
 #   3 - error during update
 update_plugin_with_feedback() {
     local plugin_spec="$1"
+    local commit_data_var="${2:-}"
     local plugin_name
+    local plugin_path
+    local old_hash=""
+    local new_hash=""
+    local commits=""
 
     plugin_name="$(get_plugin_name "$plugin_spec")"
+    plugin_path="$(get_plugin_path "$plugin_spec")"
 
     # Check if plugin is installed
     if ! plugin_already_installed "$plugin_spec"; then
@@ -56,24 +126,188 @@ update_plugin_with_feedback() {
         return 2
     fi
 
+    # Capture commit hash before update
+    old_hash="$(get_plugin_commit_hash "$plugin_spec")"
+
     # Attempt to update the plugin
     local update_output
     update_output=$(update_plugin "$plugin_spec" 2>&1)
     local update_result=$?
 
     if [[ $update_result -eq 0 ]]; then
+        # Capture commit hash after update
+        new_hash="$(get_plugin_commit_hash "$plugin_spec")"
+
         # Check if there were actually changes
         if [[ "$update_output" =~ "Already up to date" ]] || [[ "$update_output" =~ "Already up-to-date" ]]; then
             format_update_output "$plugin_name" "up_to_date"
+            # Store commit data even for up-to-date plugins
+            if [[ -n "$commit_data_var" ]]; then
+                printf -v "$commit_data_var" "%s|%s|" "$old_hash" "$new_hash"
+            fi
             return 1
         else
             format_update_output "$plugin_name" "success"
+            # Get all commits between old and new hash
+            if [[ -n "$old_hash" ]] && [[ -n "$new_hash" ]] && [[ "$old_hash" != "$new_hash" ]]; then
+                commits="$(get_plugin_commits_between "$old_hash" "$new_hash" "$plugin_path")"
+            fi
+            # Store commit data
+            if [[ -n "$commit_data_var" ]]; then
+                printf -v "$commit_data_var" "%s|%s|%s" "$old_hash" "$new_hash" "$commits"
+            fi
             return 0
         fi
     else
         format_update_output "$plugin_name" "error"
+        # Store commit data for errors (may have partial info)
+        if [[ -n "$commit_data_var" ]]; then
+            printf -v "$commit_data_var" "%s|%s|" "$old_hash" "$new_hash"
+        fi
         return 3
     fi
+}
+
+# Format commit display for a single plugin
+# Args:
+#   $1 - plugin name
+#   $2 - old commit hash
+#   $3 - new commit hash
+#   $4 - commits list (newline-separated, format: hash|message|time)
+#   $5 - status (updated, up_to_date, error)
+#   $6 - plugin path
+format_commit_display() {
+    local plugin_name="$1"
+    local old_hash="$2"
+    local new_hash="$3"
+    local commits="$4"
+    local status="$5"
+    local plugin_path="$6"
+    local colour_bullet
+    local colour_name
+    local colour_meta
+    local colour_reset_code
+
+    # Determine colours based on status
+    case "$status" in
+        updated)
+            colour_bullet="$(colour_green)"
+            colour_name="$(colour_green)"
+            ;;
+        up_to_date)
+            colour_bullet="$(colour_yellow)"
+            colour_name="$(colour_yellow)"
+            ;;
+        error)
+            colour_bullet="$(colour_red)"
+            colour_name="$(colour_red)"
+            ;;
+        *)
+            colour_bullet=""
+            colour_name=""
+            ;;
+    esac
+    colour_meta="$(colour_cyan)"
+    colour_reset_code="$(colour_reset)"
+
+    # Print plugin name with coloured bullet
+    echo "${colour_bullet}●${colour_reset_code} ${colour_name}${plugin_name}${colour_reset_code}"
+
+    # Print update range if we have both hashes
+    if [[ -n "$old_hash" ]] && [[ -n "$new_hash" ]]; then
+        if [[ "$old_hash" != "$new_hash" ]]; then
+            echo "  ${colour_meta}📖 updated from ${old_hash} to ${new_hash}${colour_reset_code}"
+        else
+            echo "  ${colour_meta}📖 at ${new_hash}${colour_reset_code}"
+        fi
+    fi
+
+    # Print all commits
+    if [[ -n "$commits" ]]; then
+        while IFS= read -r commit_line; do
+            [[ -z "$commit_line" ]] && continue
+            IFS='|' read -r commit_hash commit_msg commit_time <<< "$commit_line"
+            echo "  ${colour_meta}${commit_hash}${colour_reset_code} ${commit_msg} (${commit_time})"
+        done <<< "$commits"
+    elif [[ "$status" == "updated" ]] && [[ -n "$new_hash" ]]; then
+        # If no commits list but we have a new hash, show at least the current commit
+        local commit_info
+        commit_info="$(get_commit_info "$new_hash" "$plugin_path")"
+        if [[ -n "$commit_info" ]]; then
+            IFS='|' read -r commit_hash commit_msg commit_time <<< "$commit_info"
+            echo "  ${colour_meta}${commit_hash}${colour_reset_code} ${commit_msg} (${commit_time})"
+        fi
+    fi
+}
+
+# Display commit summary section
+# Args:
+#   $1 - array of plugin data (format: plugin_spec|plugin_name|old_hash|new_hash|commits|status|plugin_path)
+display_commit_summary() {
+    local updated_count=0
+    local plugin_data_list=("$@")
+    local plugin_spec
+    local plugin_name
+    local old_hash
+    local new_hash
+    local commits
+    local status
+    local plugin_path
+
+    # Count updated plugins
+    # Parse from the end to get status (avoids issues with newlines in commits)
+    for plugin_data in "${plugin_data_list[@]}"; do
+        [[ -z "$plugin_data" ]] && continue
+        # Extract status (second-to-last field)
+        local temp_status="${plugin_data%|*}"  # Remove last field (plugin_path)
+        temp_status="${temp_status##*|}"       # Get last remaining field (status)
+        if [[ "$temp_status" == "updated" ]]; then
+            ((updated_count++))
+        fi
+    done
+
+    # Only show summary if there are updated plugins
+    if [[ $updated_count -eq 0 ]]; then
+        return 0
+    fi
+
+    echo ""
+    local colour_header="$(colour_green)"
+    local colour_reset_code="$(colour_reset)"
+    echo "${colour_header}Updated (${updated_count})${colour_reset_code}"
+    echo ""
+
+    # Display each updated plugin
+    for plugin_data in "${plugin_data_list[@]}"; do
+        [[ -z "$plugin_data" ]] && continue
+
+        # Parse plugin data (format: plugin_spec|plugin_name|old_hash|new_hash|commits|status|plugin_path)
+        # We need to handle commits which may contain newlines, so parse from both ends
+        # Extract first 4 fields from the start
+        local temp_data="$plugin_data"
+        plugin_spec="${temp_data%%|*}"
+        temp_data="${temp_data#*|}"
+        plugin_name="${temp_data%%|*}"
+        temp_data="${temp_data#*|}"
+        old_hash="${temp_data%%|*}"
+        temp_data="${temp_data#*|}"
+        new_hash="${temp_data%%|*}"
+        temp_data="${temp_data#*|}"
+
+        # Extract last 2 fields from the end
+        plugin_path="${temp_data##*|}"
+        temp_data="${temp_data%|*}"
+        status="${temp_data##*|}"
+
+        # Everything remaining is commits
+        commits="${temp_data%|*}"
+
+        # Only show updated plugins in the summary
+        if [[ "$status" == "updated" ]]; then
+            format_commit_display "$plugin_name" "$old_hash" "$new_hash" "$commits" "$status" "$plugin_path"
+            echo ""
+        fi
+    done
 }
 
 # Update all plugins from config file
@@ -88,6 +322,15 @@ update_all_plugins() {
     local up_to_date_count=0
     local not_installed_count=0
     local error_count=0
+    local commit_data_list=()
+    local plugin_spec
+    local plugin_name
+    local plugin_path
+    local commit_data
+    local old_hash
+    local new_hash
+    local commits
+    local status
 
     # Get plugins list
     plugins="$(parse_plugins "$config_path")"
@@ -108,25 +351,62 @@ update_all_plugins() {
 
         ((current++))
 
-        # Update the plugin
-        update_plugin_with_feedback "$plugin_spec"
+        plugin_name="$(get_plugin_name "$plugin_spec")"
+        plugin_path="$(get_plugin_path "$plugin_spec")"
+        commit_data=""
+
+        # Update the plugin and capture commit data
+        update_plugin_with_feedback "$plugin_spec" "commit_data"
         local result=$?
 
+        # Parse commit data (format: old_hash|new_hash|commits)
+        # Note: commits may contain newlines, so we need to handle parsing carefully
+        old_hash=""
+        new_hash=""
+        commits=""
+        if [[ -n "$commit_data" ]]; then
+            # Split on first two pipes only, rest is commits (which may contain newlines)
+            local first_pipe
+            local second_pipe
+            first_pipe="${commit_data%%|*}"
+            old_hash="$first_pipe"
+            local after_first="${commit_data#*|}"
+            second_pipe="${after_first%%|*}"
+            new_hash="$second_pipe"
+            # Everything after the second pipe is commits
+            commits="${after_first#*|}"
+        fi
+
+        # Determine status for commit display
         case $result in
             0)
                 ((updated_count++))
+                status="updated"
                 ;;
             1)
                 ((up_to_date_count++))
+                status="up_to_date"
                 ;;
             2)
                 ((not_installed_count++))
+                status="not_installed"
                 ;;
             *)
                 ((error_count++))
+                status="error"
                 ;;
         esac
+
+        # Store commit data for summary (only if plugin is installed)
+        if [[ $result -ne 2 ]]; then
+            commit_data_list+=("${plugin_spec}|${plugin_name}|${old_hash}|${new_hash}|${commits}|${status}|${plugin_path}")
+        fi
     done <<< "$plugins"
+
+    # Display commit summary
+    if [[ ${#commit_data_list[@]} -gt 0 ]]; then
+        display_commit_summary "${commit_data_list[@]}"
+    fi
 
     # Print summary
     echo ""

@@ -137,3 +137,103 @@ update_plugin() {
     return $?
 }
 
+# Get the current HEAD commit hash for a plugin (short format)
+# Args:
+#   $1 - plugin specification
+# Returns:
+#   Short commit hash (7 characters) or empty string on error
+get_plugin_commit_hash() {
+    local plugin_spec="$1"
+    local plugin_path
+
+    plugin_path="$(get_plugin_path "$plugin_spec")"
+
+    if [[ ! -d "$plugin_path" ]]; then
+        return 1
+    fi
+
+    if ! is_git_repo "$plugin_path"; then
+        return 1
+    fi
+
+    cd "$plugin_path" || return 1
+    git rev-parse --short HEAD 2>/dev/null
+}
+
+# Get all commits between two commit hashes
+# Returns newline-separated list of commits, each line format: hash|message|time
+# Args:
+#   $1 - old commit hash (or empty for all commits up to new)
+#   $2 - new commit hash
+#   $3 - plugin path
+get_plugin_commits_between() {
+    local old_hash="$1"
+    local new_hash="$2"
+    local plugin_path="$3"
+    local range
+
+    if [[ ! -d "$plugin_path" ]]; then
+        return 1
+    fi
+
+    if ! is_git_repo "$plugin_path"; then
+        return 1
+    fi
+
+    cd "$plugin_path" || return 1
+
+    # Build range for git log
+    if [[ -z "$old_hash" ]]; then
+        range="$new_hash"
+    else
+        # Use ^old_hash to exclude it and show commits after it
+        range="${old_hash}..${new_hash}"
+    fi
+
+    # Get commits with hash, message, and relative time
+    # Format: short_hash|message|relative_time
+    git log --format="%h|%s|%ar" "$range" 2>/dev/null
+}
+
+# Format commit time as relative time (e.g., "2 hours ago")
+# Args:
+#   $1 - commit hash
+#   $2 - plugin path
+format_commit_time() {
+    local commit_hash="$1"
+    local plugin_path="$2"
+
+    if [[ ! -d "$plugin_path" ]]; then
+        return 1
+    fi
+
+    if ! is_git_repo "$plugin_path"; then
+        return 1
+    fi
+
+    cd "$plugin_path" || return 1
+    git log -1 --format="%ar" "$commit_hash" 2>/dev/null
+}
+
+# Get commit information (hash, message, time) for a single commit
+# Args:
+#   $1 - commit hash
+#   $2 - plugin path
+# Returns:
+#   Format: hash|message|time
+get_commit_info() {
+    local commit_hash="$1"
+    local plugin_path="$2"
+
+    if [[ ! -d "$plugin_path" ]]; then
+        return 1
+    fi
+
+    if ! is_git_repo "$plugin_path"; then
+        return 1
+    fi
+
+    cd "$plugin_path" || return 1
+    git log -1 --format="%h|%s|%ar" "$commit_hash" 2>/dev/null
+}
+
