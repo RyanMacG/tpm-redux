@@ -39,6 +39,8 @@ TPM Redux is a modern, performance-focused reimplementation of [TPM (Tmux Plugin
 - Plugin search and discovery
 - Lock file support for reproducible installations
 
+See [ROADMAP.md](ROADMAP.md) for detailed feature planning and issue tracking.
+
 ## Requirements
 
 - tmux 1.9 or higher
