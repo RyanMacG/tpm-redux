@@ -254,3 +254,15 @@ EOF
     [ "$output" = "$XDG_CONFIG_HOME/tmux/plugins/" ]
 }
 
+@test "get_tpm_path expands quoted tilde in env var (regression)" {
+    # Simulate user exporting with single quotes:
+    # export TMUX_PLUGIN_MANAGER_PATH='~/.tmux/plugins'
+    # or set-environment -g TMUX_PLUGIN_MANAGER_PATH '~/.tmux/plugins'
+    #
+    # This ensures the script expands it to $HOME manually
+    export TMUX_PLUGIN_MANAGER_PATH='~/.tmux/test-plugins'
+
+    run get_tpm_path
+    [ "$status" -eq 0 ]
+    [ "$output" = "$HOME/.tmux/test-plugins" ]
+}
