@@ -21,6 +21,8 @@ teardown() {
 @test "get_tmux_config_path finds ~/.tmux.conf" {
     # Create mock config in home directory
     export HOME="$TPM_TEST_DIR/home"
+    unset XDG_CONFIG_HOME
+
     mkdir -p "$HOME"
     touch "$HOME/.tmux.conf"
 
@@ -49,6 +51,7 @@ teardown() {
 @test "get_tmux_config_path handles missing config" {
 
     export HOME="$TPM_TEST_DIR/home"
+    unset XDG_CONFIG_HOME
     mkdir -p "$HOME"
 
 
@@ -228,6 +231,7 @@ EOF
 
     export HOME="$TPM_TEST_DIR/home"
     unset TMUX_PLUGIN_MANAGER_PATH
+    unset XDG_CONFIG_HOME
 
 
     run get_tpm_path
