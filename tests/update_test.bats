@@ -79,14 +79,17 @@ set -g @plugin 'user/plugin1'
 set -g @plugin 'user/plugin2'
 EOF
 
-    # Create mock repos with remotes
-    local remote_repo="$TPM_TEST_DIR/remote"
-    mkdir -p "$remote_repo"
-    cd "$remote_repo"
-    git init --bare >/dev/null 2>&1
-
+    # Create separate mock repos with remotes for each plugin
     for plugin in plugin1 plugin2; do
+        local remote_repo="$TPM_TEST_DIR/remote-$plugin"
         local plugin_path="$TMUX_PLUGIN_MANAGER_PATH/$plugin"
+        
+        # Create remote repo for this plugin
+        mkdir -p "$remote_repo"
+        cd "$remote_repo"
+        git init --bare >/dev/null 2>&1
+        
+        # Set up local plugin repo
         mkdir -p "$plugin_path"
         cd "$plugin_path"
         git init >/dev/null 2>&1
