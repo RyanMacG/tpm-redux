@@ -21,6 +21,8 @@ teardown() {
 @test "get_tmux_config_path finds ~/.tmux.conf" {
     # Create mock config in home directory
     export HOME="$TPM_TEST_DIR/home"
+    unset XDG_CONFIG_HOME
+
     mkdir -p "$HOME"
     touch "$HOME/.tmux.conf"
 
@@ -49,6 +51,7 @@ teardown() {
 @test "get_tmux_config_path handles missing config" {
 
     export HOME="$TPM_TEST_DIR/home"
+    unset XDG_CONFIG_HOME
     mkdir -p "$HOME"
 
 
@@ -228,6 +231,7 @@ EOF
 
     export HOME="$TPM_TEST_DIR/home"
     unset TMUX_PLUGIN_MANAGER_PATH
+    unset XDG_CONFIG_HOME
 
 
     run get_tpm_path
@@ -250,3 +254,15 @@ EOF
     [ "$output" = "$XDG_CONFIG_HOME/tmux/plugins/" ]
 }
 
+@test "get_tpm_path expands quoted tilde in env var (regression)" {
+    # Simulate user exporting with single quotes:
+    # export TMUX_PLUGIN_MANAGER_PATH='~/.tmux/plugins'
+    # or set-environment -g TMUX_PLUGIN_MANAGER_PATH '~/.tmux/plugins'
+    #
+    # This ensures the script expands it to $HOME manually
+    export TMUX_PLUGIN_MANAGER_PATH='~/.tmux/test-plugins'
+
+    run get_tpm_path
+    [ "$status" -eq 0 ]
+    [ "$output" = "$HOME/.tmux/test-plugins" ]
+}
