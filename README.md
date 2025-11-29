@@ -20,7 +20,7 @@ TPM Redux is a modern, performance-focused reimplementation of [TPM (Tmux Plugin
 
 ## Status
 
-🎉 **v1.1.2 - Stable** - Production ready with 100% TPM feature parity!
+🎉 **v1.1.3 - Stable** - Production ready with 100% TPM feature parity!
 
 ## Features
 
@@ -228,7 +228,14 @@ No configuration changes needed - your existing `.tmux.conf` works as-is!
 
 ## Release Notes
 
-### v1.1.2 (Current)
+### v1.1.3 (Current)
+- 🐛 Fix: Handle quoted tilde in TPM path (#27)
+  - TMUX_PLUGIN_MANAGER_PATH now correctly expands when set with single quotes
+  - Manual tilde expansion for quoted paths (e.g., `export TMUX_PLUGIN_MANAGER_PATH='~/.tmux/plugins'`)
+  - Improved test isolation by preventing XDG environment variable inheritance
+  - Fixed test failure in update_all_plugins with multiple plugins
+
+### v1.1.2
 - 🐛 Fix: Improved color detection for tmux popups
   - Colors now work correctly in tmux popups with xterm-256color
   - Fixed color detection when stdout is not a TTY
