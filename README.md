@@ -16,6 +16,8 @@ TPM Redux is a modern, performance-focused reimplementation of [TPM (Tmux Plugin
 - 🔄 **Active development** - Built with future enhancements in mind
 - 📖 **Comprehensive docs** - Clear installation and usage instructions
 
+<script type='text/javascript' src='https://storage.ko-fi.com/cdn/widget/Widget_2.js'></script><script type='text/javascript'>kofiwidget2.init('Buy me a Ko-fi', '#4b85d6', 'X7X41PCTS3');kofiwidget2.draw();</script>
+
 ## Status
 
 🎉 **v1.1.2 - Stable** - Production ready with 100% TPM feature parity!
