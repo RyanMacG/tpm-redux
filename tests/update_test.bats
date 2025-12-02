@@ -83,12 +83,12 @@ EOF
     for plugin in plugin1 plugin2; do
         local remote_repo="$TPM_TEST_DIR/remote-$plugin"
         local plugin_path="$TMUX_PLUGIN_MANAGER_PATH/$plugin"
-        
+
         # Create remote repo for this plugin
         mkdir -p "$remote_repo"
         cd "$remote_repo"
         git init --bare >/dev/null 2>&1
-        
+
         # Set up local plugin repo
         mkdir -p "$plugin_path"
         cd "$plugin_path"
