@@ -20,8 +20,8 @@ expand_plugin_url() {
     # Remove branch specification if present
     plugin_spec="${plugin_spec%%#*}"
 
-    # If it's already a full URL (starts with http:// https:// or git@), return as-is
-    if [[ "$plugin_spec" =~ ^(https?://|git@) ]]; then
+    # If it's already a full URL (starts with http:// https:// file:// or git@), return as-is
+    if [[ "$plugin_spec" =~ ^(https?://|file://|git@) ]]; then
         echo "$plugin_spec"
         return 0
     fi
@@ -85,10 +85,25 @@ get_plugin_remote_url() {
     git remote get-url origin 2>/dev/null
 }
 
+# Check if a string looks like a commit hash (7+ hex characters)
+# Args:
+#   $1 - string to check
+# Returns:
+#   0 if it looks like a commit hash, 1 otherwise
+is_commit_hash() {
+    local str="$1"
+    # Commit hashes are typically 7+ hexadecimal characters
+    # Check if it's all hex and at least 7 characters
+    if [[ -n "$str" ]] && [[ "$str" =~ ^[0-9a-f]{7,}$ ]]; then
+        return 0
+    fi
+    return 1
+}
+
 # Clone a plugin repository
 # Args:
 #   $1 - plugin specification
-#   $2 - optional branch name
+#   $2 - optional branch name, tag, or commit hash
 clone_plugin() {
     local plugin_spec="$1"
     local branch="$2"
@@ -102,10 +117,30 @@ clone_plugin() {
     mkdir -p "$(dirname "$plugin_path")"
 
     # Clone with appropriate options
-    local clone_opts=(--single-branch --recursive)
+    local clone_opts=(--recursive)
+    local clone_result
 
     if [[ -n "$branch" ]]; then
-        clone_opts+=(-b "$branch")
+        # Check if branch is actually a commit hash
+        if is_commit_hash "$branch"; then
+            # For commit hashes, clone without -b, then checkout the commit
+            # We can't use --single-branch with commit hashes
+            GIT_TERMINAL_PROMPT=0 git clone "${clone_opts[@]}" "$plugin_url" "$plugin_path" 2>&1
+            clone_result=$?
+            if [[ $clone_result -eq 0 ]]; then
+                # Checkout the specific commit
+                cd "$plugin_path" || return 1
+                GIT_TERMINAL_PROMPT=0 git checkout "$branch" >/dev/null 2>&1
+                clone_result=$?
+            fi
+            return $clone_result
+        else
+            # For branches/tags, use -b flag with --single-branch
+            clone_opts+=(--single-branch -b "$branch")
+        fi
+    else
+        # No branch specified, use --single-branch for efficiency
+        clone_opts+=(--single-branch)
     fi
 
     # Disable git terminal prompts for automation
