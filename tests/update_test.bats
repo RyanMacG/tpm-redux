@@ -351,3 +351,76 @@ EOF
     [[ "$output" =~ "Updating" ]]
 }
 
+
+@test "update_plugin updates from pinned commit hash to branch head" {
+    # Create a mock git repository with remote
+    local remote_repo="$TPM_TEST_DIR/remote-repo"
+    # Plugin path will be based on the repo name (remote-repo)
+    local plugin_path="$TMUX_PLUGIN_MANAGER_PATH/remote-repo"
+
+    # Set up remote repo
+    mkdir -p "$remote_repo"
+    cd "$remote_repo"
+    git init --bare >/dev/null 2>&1
+
+    # Clone the repo to create commits
+    local temp_clone="$TPM_TEST_DIR/temp-clone"
+    git clone "$remote_repo" "$temp_clone" >/dev/null 2>&1
+    cd "$temp_clone"
+    git config user.email "test@example.com"
+    git config user.name "Test User"
+    git config commit.gpgsign false
+
+    # Create initial commit
+    echo "v1" > README.md
+    git add README.md >/dev/null 2>&1
+    git commit -m "Initial commit" >/dev/null 2>&1
+    git branch -M main >/dev/null 2>&1
+    git push -u origin main >/dev/null 2>&1
+
+    # Get the first commit hash
+    local first_hash
+    first_hash="$(git rev-parse --short HEAD)"
+
+    # Create second commit
+    echo "v2" > README.md
+    git add README.md >/dev/null 2>&1
+    git commit -m "Second commit" >/dev/null 2>&1
+    git push origin main >/dev/null 2>&1
+
+    # Get the second commit hash
+    local second_hash
+    second_hash="$(git rev-parse --short HEAD)"
+
+    # Install plugin pinned to first commit (simulates previous pinning)
+    local plugin_spec="file://$remote_repo#${first_hash}"
+    run clone_plugin "$plugin_spec" "$first_hash"
+    [ "$status" -eq 0 ]
+
+    # Verify we're at the first commit (detached HEAD)
+    cd "$plugin_path" || exit 1
+    local current_hash
+    current_hash="$(git rev-parse --short HEAD)"
+    [ "$current_hash" = "$first_hash" ]
+    
+    # Verify HEAD is detached
+    local current_ref
+    current_ref="$(git rev-parse --abbrev-ref HEAD)"
+    [ "$current_ref" = "HEAD" ]
+
+    # Update the plugin without pin (should move from pinned commit to branch head)
+    run update_plugin "file://$remote_repo"
+    [ "$status" -eq 0 ]
+
+    # Verify we're now at the second commit (branch head)
+    cd "$plugin_path" || exit 1
+    current_hash="$(git rev-parse --short HEAD)"
+    [ "$current_hash" = "$second_hash" ]
+    
+    # Verify we're on a branch now (not detached)
+    current_ref="$(git rev-parse --abbrev-ref HEAD)"
+    [ "$current_ref" = "main" ]
+
+    # Cleanup
+    rm -rf "$temp_clone"
+}

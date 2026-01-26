@@ -150,8 +150,20 @@ update_plugin_with_feedback() {
         # Capture commit hash after update
         new_hash="$(get_plugin_commit_hash "$plugin_spec")"
 
-        # Check if there were actually changes
-        if [[ "$update_output" =~ "Already up to date" ]] || [[ "$update_output" =~ "Already up-to-date" ]]; then
+        # Check if there were actually changes by comparing commit hashes first
+        # This handles the case where we move from detached HEAD (pinned commit) to branch head
+        # Git pull might say "Already up to date" but we actually changed commits
+        if [[ -n "$old_hash" ]] && [[ -n "$new_hash" ]] && [[ "$old_hash" != "$new_hash" ]]; then
+            # Commit hash changed - this is an update, regardless of git pull output
+            format_update_output "$plugin_name" "success"
+            # Get most recent 1-2 commits between old and new hash (for display)
+            commits="$(get_plugin_commits_between "$old_hash" "$new_hash" "$plugin_path" "2")"
+            # Store commit data
+            if [[ -n "$commit_data_var" ]]; then
+                printf -v "$commit_data_var" "%s|%s|%s" "$old_hash" "$new_hash" "$commits"
+            fi
+            return 0
+        elif [[ "$update_output" =~ "Already up to date" ]] || [[ "$update_output" =~ "Already up-to-date" ]]; then
             format_update_output "$plugin_name" "up_to_date"
             # Store commit data even for up-to-date plugins
             if [[ -n "$commit_data_var" ]]; then
@@ -159,14 +171,11 @@ update_plugin_with_feedback() {
             fi
             return 1
         else
+            # Git output doesn't indicate up-to-date, but hashes are same (edge case)
             format_update_output "$plugin_name" "success"
-            # Get all commits between old and new hash
-            if [[ -n "$old_hash" ]] && [[ -n "$new_hash" ]] && [[ "$old_hash" != "$new_hash" ]]; then
-                commits="$(get_plugin_commits_between "$old_hash" "$new_hash" "$plugin_path")"
-            fi
             # Store commit data
             if [[ -n "$commit_data_var" ]]; then
-                printf -v "$commit_data_var" "%s|%s|%s" "$old_hash" "$new_hash" "$commits"
+                printf -v "$commit_data_var" "%s|%s|" "$old_hash" "$new_hash"
             fi
             return 0
         fi

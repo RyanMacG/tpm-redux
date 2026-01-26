@@ -154,6 +154,9 @@ clone_plugin() {
 update_plugin() {
     local plugin_spec="$1"
     local plugin_path
+    local branch
+    local current_ref
+    local default_branch
 
     plugin_path="$(get_plugin_path "$plugin_spec")"
 
@@ -166,6 +169,58 @@ update_plugin() {
     fi
 
     cd "$plugin_path" || return 1
+
+    # Get the branch/tag/commit from plugin spec
+    branch="$(get_plugin_branch "$plugin_spec")"
+
+    # Check if HEAD is detached (common when cloned with commit hash)
+    current_ref="$(git rev-parse --abbrev-ref HEAD 2>/dev/null)"
+    if [[ "$current_ref" == "HEAD" ]]; then
+        # HEAD is detached - need to checkout appropriate branch/commit first
+        if [[ -n "$branch" ]]; then
+            if is_commit_hash "$branch"; then
+                # Specified commit hash - checkout that commit (no pull needed)
+                GIT_TERMINAL_PROMPT=0 git checkout "$branch" >/dev/null 2>&1
+                return $?
+            else
+                # Specified branch/tag - checkout that branch/tag, then pull
+                GIT_TERMINAL_PROMPT=0 git checkout "$branch" >/dev/null 2>&1
+                if [[ $? -ne 0 ]]; then
+                    return 1
+                fi
+            fi
+        else
+            # No branch specified - checkout default branch (main or master)
+            # Try to determine default branch from remote
+            default_branch="$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@')"
+            if [[ -z "$default_branch" ]]; then
+                # Fallback: try main, then master
+                if git show-ref --verify --quiet refs/remotes/origin/main; then
+                    default_branch="main"
+                elif git show-ref --verify --quiet refs/remotes/origin/master; then
+                    default_branch="master"
+                else
+                    # Last resort: use whatever branch exists
+                    default_branch="$(git branch -r | head -1 | sed 's@^origin/@@' | xargs)"
+                fi
+            fi
+            if [[ -n "$default_branch" ]]; then
+                GIT_TERMINAL_PROMPT=0 git checkout "$default_branch" >/dev/null 2>&1
+                if [[ $? -ne 0 ]]; then
+                    return 1
+                fi
+            fi
+        fi
+    elif [[ -n "$branch" ]] && ! is_commit_hash "$branch"; then
+        # HEAD is not detached, but we have a branch/tag specified
+        # Check if we're already on the right branch
+        if [[ "$current_ref" != "$branch" ]]; then
+            GIT_TERMINAL_PROMPT=0 git checkout "$branch" >/dev/null 2>&1
+            if [[ $? -ne 0 ]]; then
+                return 1
+            fi
+        fi
+    fi
 
     # Pull latest changes
     GIT_TERMINAL_PROMPT=0 git pull --ff-only --recurse-submodules 2>&1
