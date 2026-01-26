@@ -116,3 +116,37 @@ get_tpm_path() {
     echo "$HOME/.tmux/plugins/"
 }
 
+
+# Get a tmux configuration value
+# Reads values like @tpm-redux-max-commits from tmux config file
+# Args:
+#   $1 - config key (e.g., "@tpm-redux-max-commits")
+#   $2 - optional config path (defaults to detected config)
+# Returns:
+#   The value if found, empty string otherwise
+get_tmux_config_value() {
+    local key="$1"
+    local config_path="${2:-$(get_tmux_config_path)}"
+    
+    if [[ ! -f "$config_path" ]]; then
+        return 0
+    fi
+    
+    # Match: set -g @key 'value' or set-option -g @key "value"
+    # Extract value (everything after the key, removing quotes)
+    awk -v key="$key" '
+        /^[[:space:]]*set(-option)?[[:space:]]+-g[[:space:]]+@/ {
+            # Check if this line matches our key
+            if ($0 ~ key) {
+                # Find the value (everything after the key)
+                # Remove quotes and print
+                for (i=4; i<=NF; i++) {
+                    value = value (i>4 ? " " : "") $i
+                }
+                gsub(/^["'\''"]|["'\''"]$/, "", value)
+                print value
+                exit
+            }
+        }
+    ' "$config_path"
+}

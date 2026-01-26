@@ -132,6 +132,22 @@ set -g @plugin 'git@github.com:tmux-plugins/tmux-sensible.git'
 - **Tags**: `user/repo#v1.0.0` - Install a specific tagged version
 - **Commit Hash**: `user/repo#abc1234` - Pin to an exact commit (7+ characters)
 
+### Configuration Options
+
+TPM Redux supports configuration via tmux options:
+
+```bash
+set -g @tpm-redux-max-commits '5'
+
+# Show all commits (unlimited)
+set -g @tpm-redux-max-commits 'all'
+
+# Disable commit display
+set -g @tpm-redux-max-commits '0'
+
+**Available Options:**
+- `@tpm-redux-max-commits` - Maximum number of commits to display when updating plugins (default: 2). Set to `'all'` to show all commits, or `'0'` to disable commit display.
+
 ### Example Configuration
 
 ```bash
@@ -145,6 +161,9 @@ set -g default-terminal "screen-256color"
 set -g @plugin 'tmux-plugins/tmux-sensible'
 set -g @plugin 'tmux-plugins/tmux-yank'
 set -g @plugin 'tmux-plugins/tmux-resurrect'
+
+# TPM Redux settings
+set -g @tpm-redux-max-commits '3'  # Show up to 3 commits in update display
 
 # Plugin settings (if any)
 set -g @resurrect-capture-pane-contents 'on'
