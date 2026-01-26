@@ -114,12 +114,23 @@ set -g @plugin 'tmux-plugins/tmux-sensible'
 # GitHub shorthand with branch
 set -g @plugin 'tmux-plugins/tmux-yank#v2.3.0'
 
+# GitHub shorthand with tag
+set -g @plugin 'tmux-plugins/tmux-yank#v2.3.0'
+
+# GitHub shorthand with commit hash (pin to specific version)
+set -g @plugin 'tmux-plugins/tmux-resurrect#abc1234'
+
 # Full git URL
 set -g @plugin 'https://github.com/tmux-plugins/tmux-sensible.git'
 
 # SSH URL
 set -g @plugin 'git@github.com:tmux-plugins/tmux-sensible.git'
 ```
+
+**Version Pinning:**
+- **Branches**: `user/repo#branch-name` - Install from a specific branch
+- **Tags**: `user/repo#v1.0.0` - Install a specific tagged version
+- **Commit Hash**: `user/repo#abc1234` - Pin to an exact commit (7+ characters)
 
 ### Example Configuration
 
