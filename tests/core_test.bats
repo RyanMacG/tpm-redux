@@ -266,3 +266,44 @@ EOF
     [ "$status" -eq 0 ]
     [ "$output" = "$HOME/.tmux/test-plugins" ]
 }
+
+# Test: get_tmux_config_value function
+
+@test "get_tmux_config_value reads config value" {
+    local config="$TPM_TEST_DIR/tmux.conf"
+    cat > "$config" <<'EOF'
+set -g @tpm-redux-max-commits '5'
+EOF
+
+    run get_tmux_config_value "@tpm-redux-max-commits" "$config"
+    [ "$status" -eq 0 ]
+    [ "$output" = "5" ]
+}
+
+@test "get_tmux_config_value handles double quotes" {
+    local config="$TPM_TEST_DIR/tmux.conf"
+    cat > "$config" <<'EOF'
+set -g @tpm-redux-max-commits "3"
+EOF
+
+    run get_tmux_config_value "@tpm-redux-max-commits" "$config"
+    [ "$status" -eq 0 ]
+    [ "$output" = "3" ]
+}
+
+@test "get_tmux_config_value returns empty for missing key" {
+    local config="$TPM_TEST_DIR/tmux.conf"
+    cat > "$config" <<'EOF'
+set -g @plugin 'tmux-plugins/tmux-sensible'
+EOF
+
+    run get_tmux_config_value "@tpm-redux-max-commits" "$config"
+    [ "$status" -eq 0 ]
+    [ -z "$output" ]
+}
+
+@test "get_tmux_config_value handles missing config file" {
+    run get_tmux_config_value "@tpm-redux-max-commits" "/nonexistent/config"
+    [ "$status" -eq 0 ]
+    [ -z "$output" ]
+}

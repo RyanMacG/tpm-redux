@@ -424,3 +424,80 @@ EOF
     # Cleanup
     rm -rf "$temp_clone"
 }
+
+@test "update_plugin_with_feedback respects @tpm-redux-max-commits set to 'all'" {
+    # Create a mock git repository with remote
+    local remote_repo="$TPM_TEST_DIR/remote-repo"
+    local plugin_path="$TMUX_PLUGIN_MANAGER_PATH/tmux-sensible"
+    local config="$TPM_TEST_DIR/tmux.conf"
+
+    # Create config with max-commits set to 'all'
+    cat > "$config" <<'EOF'
+set -g @tpm-redux-max-commits 'all'
+set -g @plugin 'tmux-plugins/tmux-sensible'
+EOF
+
+    # Set up remote repo
+    mkdir -p "$remote_repo"
+    cd "$remote_repo"
+    git init --bare >/dev/null 2>&1
+
+    # Set up local plugin repo
+    mkdir -p "$plugin_path"
+    cd "$plugin_path"
+    git init >/dev/null 2>&1
+    git config user.email "test@example.com"
+    git config user.name "Test User"
+    git config commit.gpgsign false
+    git remote add origin "$remote_repo" >/dev/null 2>&1
+
+    # Create multiple commits
+    echo "# Test" > README.md
+    git add README.md >/dev/null 2>&1
+    git commit -m "First commit" >/dev/null 2>&1
+    git push -u origin master >/dev/null 2>&1 || git push -u origin main >/dev/null 2>&1
+    
+    local old_hash
+    old_hash="$(git rev-parse --short HEAD)"
+
+    echo "# Updated" > README.md
+    git add README.md >/dev/null 2>&1
+    git commit -m "Second commit" >/dev/null 2>&1
+    git push origin master >/dev/null 2>&1 || git push origin main >/dev/null 2>&1
+
+    echo "# More" > README.md
+    git add README.md >/dev/null 2>&1
+    git commit -m "Third commit" >/dev/null 2>&1
+    git push origin master >/dev/null 2>&1 || git push origin main >/dev/null 2>&1
+
+    echo "# Even more" > README.md
+    git add README.md >/dev/null 2>&1
+    git commit -m "Fourth commit" >/dev/null 2>&1
+    git push origin master >/dev/null 2>&1 || git push origin main >/dev/null 2>&1
+
+    # Checkout old commit to simulate update scenario
+    git checkout "$old_hash" >/dev/null 2>&1
+
+    # Update plugin and capture commit data
+    # Note: Don't use 'run' here because variable assignments don't persist in subshells
+    local commit_data=""
+    update_plugin_with_feedback "tmux-plugins/tmux-sensible" "commit_data" "$config"
+    local update_status=$?
+    [ "$update_status" -le 1 ]
+
+    # Parse commit data (format: old_hash|new_hash|commits)
+    local old_hash_parsed new_hash_parsed commits
+    old_hash_parsed="${commit_data%%|*}"
+    local after_first="${commit_data#*|}"
+    new_hash_parsed="${after_first%%|*}"
+    commits="${after_first#*|}"
+    
+    # Count commit lines (should be all 3 commits when set to 'all')
+    local commit_count=0
+    if [[ -n "$commits" ]]; then
+        # Count non-empty lines
+        commit_count=$(echo "$commits" | grep -c . || echo 0)
+    fi
+    # Should have at least 3 commits (we created 3 after the old hash)
+    [ "$commit_count" -ge 3 ]
+}

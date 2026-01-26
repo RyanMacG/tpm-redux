@@ -123,11 +123,13 @@ format_update_output() {
 update_plugin_with_feedback() {
     local plugin_spec="$1"
     local commit_data_var="${2:-}"
+    local config_path="${3:-$(get_tmux_config_path)}"
     local plugin_name
     local plugin_path
     local old_hash=""
     local new_hash=""
     local commits=""
+    local max_commits
 
     plugin_name="$(get_plugin_name "$plugin_spec")"
     plugin_path="$(get_plugin_path "$plugin_spec")"
@@ -156,8 +158,15 @@ update_plugin_with_feedback() {
         if [[ -n "$old_hash" ]] && [[ -n "$new_hash" ]] && [[ "$old_hash" != "$new_hash" ]]; then
             # Commit hash changed - this is an update, regardless of git pull output
             format_update_output "$plugin_name" "success"
-            # Get most recent 1-2 commits between old and new hash (for display)
-            commits="$(get_plugin_commits_between "$old_hash" "$new_hash" "$plugin_path" "2")"
+            # Get max commits from config (default: 2)
+            max_commits="$(get_tmux_config_value "@tpm-redux-max-commits" "$config_path")"
+            max_commits="${max_commits:-2}"  # Default to 2 if not set
+            # Handle "all" as special value to show unlimited commits
+            if [[ "$max_commits" == "all" ]]; then
+                max_commits=""
+            fi
+            # Get most recent commits between old and new hash (for display)
+            commits="$(get_plugin_commits_between "$old_hash" "$new_hash" "$plugin_path" "$max_commits")"
             # Store commit data
             if [[ -n "$commit_data_var" ]]; then
                 printf -v "$commit_data_var" "%s|%s|%s" "$old_hash" "$new_hash" "$commits"
@@ -234,21 +243,23 @@ format_commit_display() {
     # Print plugin name with coloured bullet
     echo "${colour_bullet}●${colour_reset_code} ${colour_name}${plugin_name}${colour_reset_code}"
 
-    # Print update range if we have both hashes
+    # Print update range if we have both hashes (lazyvim-style: no emoji)
     if [[ -n "$old_hash" ]] && [[ -n "$new_hash" ]]; then
         if [[ "$old_hash" != "$new_hash" ]]; then
-            echo "  ${colour_meta}📖 updated from ${old_hash} to ${new_hash}${colour_reset_code}"
+            echo "  ${colour_meta}updated from ${old_hash} to ${new_hash}${colour_reset_code}"
         else
-            echo "  ${colour_meta}📖 at ${new_hash}${colour_reset_code}"
+            echo "  ${colour_meta}at ${new_hash}${colour_reset_code}"
         fi
     fi
 
-    # Print all commits
+    # Print most recent 1-2 commits (lazyvim-style: limit for readability)
     if [[ -n "$commits" ]]; then
-        while IFS= read -r commit_line; do
+        local commit_count=0
+        while IFS= read -r commit_line && [[ $commit_count -lt 2 ]]; do
             [[ -z "$commit_line" ]] && continue
             IFS='|' read -r commit_hash commit_msg commit_time <<< "$commit_line"
             echo "  ${colour_meta}${commit_hash}${colour_reset_code} ${commit_msg} (${commit_time})"
+            ((commit_count++))
         done <<< "$commits"
     elif [[ "$status" == "updated" ]] && [[ -n "$new_hash" ]]; then
         # If no commits list but we have a new hash, show at least the current commit
@@ -259,6 +270,8 @@ format_commit_display() {
             echo "  ${colour_meta}${commit_hash}${colour_reset_code} ${commit_msg} (${commit_time})"
         fi
     fi
+
+    return 0
 }
 
 # Display commit summary section
@@ -379,7 +392,7 @@ update_all_plugins() {
         commit_data=""
 
         # Update the plugin and capture commit data
-        update_plugin_with_feedback "$plugin_spec" "commit_data"
+        update_plugin_with_feedback "$plugin_spec" "commit_data" "$config_path"
         local result=$?
 
         # Parse commit data (format: old_hash|new_hash|commits)

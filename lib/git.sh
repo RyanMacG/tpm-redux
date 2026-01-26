@@ -256,10 +256,12 @@ get_plugin_commit_hash() {
 #   $1 - old commit hash (or empty for all commits up to new)
 #   $2 - new commit hash
 #   $3 - plugin path
+#   $4 - optional: maximum number of commits to return (default: all)
 get_plugin_commits_between() {
     local old_hash="$1"
     local new_hash="$2"
     local plugin_path="$3"
+    local max_commits="${4:-}"
     local range
 
     if [[ ! -d "$plugin_path" ]]; then
@@ -282,7 +284,12 @@ get_plugin_commits_between() {
 
     # Get commits with hash, message, and relative time
     # Format: short_hash|message|relative_time
-    git log --format="%h|%s|%ar" "$range" 2>/dev/null
+    # Limit to max_commits if specified
+    if [[ -n "$max_commits" ]] && [[ "$max_commits" =~ ^[0-9]+$ ]]; then
+        git log --format="%h|%s|%ar" -n "$max_commits" "$range" 2>/dev/null
+    else
+        git log --format="%h|%s|%ar" "$range" 2>/dev/null
+    fi
 }
 
 # Format commit time as relative time (e.g., "2 hours ago")
