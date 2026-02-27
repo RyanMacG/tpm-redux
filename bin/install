@@ -75,6 +75,7 @@ install_plugin_with_feedback() {
 # Install all plugins from config file
 # Args:
 #   $1 - optional config path (defaults to detected config)
+# Uses TPM_PARALLEL=1 to run plugin installs in parallel (when multiple plugins)
 install_all_plugins() {
     local config_path="${1:-$(get_tmux_config_path)}"
     local plugins
@@ -83,6 +84,8 @@ install_all_plugins() {
     local success_count=0
     local skip_count=0
     local error_count=0
+    local use_parallel="${TPM_PARALLEL:-0}"
+    local tmpdir
 
     # Get plugins list
     plugins="$(parse_plugins "$config_path")"
@@ -97,28 +100,48 @@ install_all_plugins() {
     echo "Installing $total_count plugin(s)..."
     echo ""
 
-    # Process each plugin
-    while IFS= read -r plugin_spec; do
-        [[ -z "$plugin_spec" ]] && continue
+    if [[ "$use_parallel" != "0" ]] && [[ "$total_count" -gt 1 ]]; then
+        # Parallel: run each install in background, collect output in config order
+        tmpdir="$(mktemp -d)"
+        current=0
+        while IFS= read -r plugin_spec; do
+            [[ -z "$plugin_spec" ]] && continue
+            ((current++))
+            (
+                install_plugin_with_feedback "$plugin_spec"
+                echo $? > "$tmpdir/$current.ret"
+            ) > "$tmpdir/$current.out" 2>&1 &
+        done <<< "$plugins"
+        wait
 
-        ((current++))
-
-        # Install the plugin
-        install_plugin_with_feedback "$plugin_spec"
-        local result=$?
-
-        case $result in
-            0)
-                ((success_count++))
-                ;;
-            1)
-                ((skip_count++))
-                ;;
-            *)
-                ((error_count++))
-                ;;
-        esac
-    done <<< "$plugins"
+        current=0
+        while IFS= read -r plugin_spec; do
+            [[ -z "$plugin_spec" ]] && continue
+            ((current++))
+            [[ -f "$tmpdir/$current.out" ]] && cat "$tmpdir/$current.out"
+            local result=2
+            [[ -f "$tmpdir/$current.ret" ]] && result=$(cat "$tmpdir/$current.ret")
+            case $result in
+                0) ((success_count++)) ;;
+                1) ((skip_count++)) ;;
+                *) ((error_count++)) ;;
+            esac
+        done <<< "$plugins"
+        rm -rf "$tmpdir"
+    else
+        # Sequential
+        while IFS= read -r plugin_spec; do
+            [[ -z "$plugin_spec" ]] && continue
+            ((current++))
+            install_plugin_with_feedback "$plugin_spec"
+            local result=$?
+            case $result in
+                0) ((success_count++)) ;;
+                1) ((skip_count++)) ;;
+                *) ((error_count++)) ;;
+            esac
+        done <<< "$plugins"
+    fi
 
     # Print summary
     echo ""
