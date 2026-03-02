@@ -134,7 +134,18 @@ set -g @plugin 'git@github.com:tmux-plugins/tmux-sensible.git'
 
 ### Configuration Options
 
-TPM Redux supports configuration via tmux options:
+TPM Redux supports configuration via tmux options and environment variables:
+
+**Parallel install/update (faster with many plugins):**
+
+```bash
+# Enable parallel plugin operations (default: 0 = sequential)
+export TPM_PARALLEL=1
+```
+
+When `TPM_PARALLEL=1`, install and update run plugins in parallel and preserve config order in the output. Set to `0` to force sequential behavior.
+
+**Commit display (tmux options):**
 
 ```bash
 set -g @tpm-redux-max-commits '5'
@@ -144,8 +155,9 @@ set -g @tpm-redux-max-commits 'all'
 
 # Disable commit display
 set -g @tpm-redux-max-commits '0'
+```
 
-**Available Options:**
+**Available options:**
 - `@tpm-redux-max-commits` - Maximum number of commits to display when updating plugins (default: 2). Set to `'all'` to show all commits, or `'0'` to disable commit display.
 
 ### Example Configuration

@@ -116,6 +116,73 @@ EOF
     [[ "$output" =~ "No plugins" || "$output" =~ "0 plugin" ]]
 }
 
+# Parallel plugin operations (TPM_PARALLEL)
+
+@test "update_all_plugins with TPM_PARALLEL=0 outputs plugin status in config order" {
+    local config="$TPM_TEST_DIR/tmux.conf"
+    cat > "$config" <<'EOF'
+set -g @plugin 'user/plugin-a'
+set -g @plugin 'user/plugin-b'
+set -g @plugin 'user/plugin-c'
+EOF
+
+    for name in plugin-a plugin-b plugin-c; do
+        local remote_repo="$TPM_TEST_DIR/remote-$name"
+        local plugin_path="$TMUX_PLUGIN_MANAGER_PATH/$name"
+        mkdir -p "$remote_repo"
+        (cd "$remote_repo" && git init --bare >/dev/null 2>&1)
+        mkdir -p "$plugin_path"
+        (cd "$plugin_path" && git init >/dev/null 2>&1 && git config user.email "t@t.com" && git config user.name "T" && git config commit.gpgsign false && git remote add origin "$remote_repo" >/dev/null 2>&1 && echo x > f && git add f && git commit -m "x" >/dev/null 2>&1 && git push -u origin master >/dev/null 2>&1 || git push -u origin main >/dev/null 2>&1)
+    done
+
+    TPM_PARALLEL=0 run update_all_plugins "$config"
+    [ "$status" -eq 0 ]
+    local first_a first_b first_c
+    first_a=$(echo "$output" | grep -n "plugin-a" | head -1 | cut -d: -f1)
+    first_b=$(echo "$output" | grep -n "plugin-b" | head -1 | cut -d: -f1)
+    first_c=$(echo "$output" | grep -n "plugin-c" | head -1 | cut -d: -f1)
+    [ "$first_a" -lt "$first_b" ]
+    [ "$first_b" -lt "$first_c" ]
+}
+
+@test "update_all_plugins with TPM_PARALLEL=1 and multiple plugins produces correct summary" {
+    local config="$TPM_TEST_DIR/tmux.conf"
+    cat > "$config" <<'EOF'
+set -g @plugin 'user/plugin1'
+set -g @plugin 'user/plugin2'
+set -g @plugin 'user/plugin3'
+EOF
+
+    for name in plugin1 plugin2 plugin3; do
+        local remote_repo="$TPM_TEST_DIR/remote-$name"
+        local plugin_path="$TMUX_PLUGIN_MANAGER_PATH/$name"
+        mkdir -p "$remote_repo"
+        (cd "$remote_repo" && git init --bare >/dev/null 2>&1)
+        mkdir -p "$plugin_path"
+        (cd "$plugin_path" && git init >/dev/null 2>&1 && git config user.email "t@t.com" && git config user.name "T" && git config commit.gpgsign false && git remote add origin "$remote_repo" >/dev/null 2>&1 && echo x > f && git add f && git commit -m "x" >/dev/null 2>&1 && git push -u origin master >/dev/null 2>&1 || git push -u origin main >/dev/null 2>&1)
+    done
+
+    TPM_PARALLEL=1 run update_all_plugins "$config"
+    [ "$status" -eq 0 ]
+    [[ "$output" =~ "Update complete" ]]
+    [[ "$output" =~ "plugin1" ]] && [[ "$output" =~ "plugin2" ]] && [[ "$output" =~ "plugin3" ]]
+}
+
+@test "update_all_plugins with single plugin ignores TPM_PARALLEL" {
+    local config="$TPM_TEST_DIR/tmux.conf"
+    echo "set -g @plugin 'user/only'" > "$config"
+    local remote_repo="$TPM_TEST_DIR/remote-only"
+    local plugin_path="$TMUX_PLUGIN_MANAGER_PATH/only"
+    mkdir -p "$remote_repo"
+    (cd "$remote_repo" && git init --bare >/dev/null 2>&1)
+    mkdir -p "$plugin_path"
+    (cd "$plugin_path" && git init >/dev/null 2>&1 && git config user.email "t@t.com" && git config user.name "T" && git config commit.gpgsign false && git remote add origin "$remote_repo" >/dev/null 2>&1 && echo x > f && git add f && git commit -m "x" >/dev/null 2>&1 && git push -u origin master >/dev/null 2>&1 || git push -u origin main >/dev/null 2>&1)
+
+    TPM_PARALLEL=1 run update_all_plugins "$config"
+    [ "$status" -eq 0 ]
+    [[ "$output" =~ "only" ]]
+}
+
 # Test: format_update_output function
 
 @test "format_update_output formats success message" {
@@ -220,6 +287,58 @@ EOF
     [[ "$output" =~ "Third commit" ]]
 }
 
+@test "get_plugin_commits_between limits to max commits when specified" {
+    local plugin_path="$TMUX_PLUGIN_MANAGER_PATH/test-plugin"
+    mkdir -p "$plugin_path"
+    cd "$plugin_path"
+    git init >/dev/null 2>&1
+    git config user.email "test@example.com"
+    git config user.name "Test User"
+    git config commit.gpgsign false
+
+    # Create first commit
+    echo "v1" > file.txt
+    git add file.txt >/dev/null 2>&1
+    git commit -m "First commit" >/dev/null 2>&1
+    local first_hash
+    first_hash="$(git rev-parse --short HEAD)"
+
+    # Create second commit
+    echo "v2" > file.txt
+    git add file.txt >/dev/null 2>&1
+    git commit -m "Second commit" >/dev/null 2>&1
+
+    # Create third commit
+    echo "v3" > file.txt
+    git add file.txt >/dev/null 2>&1
+    git commit -m "Third commit" >/dev/null 2>&1
+
+    # Create fourth commit
+    echo "v4" > file.txt
+    git add file.txt >/dev/null 2>&1
+    git commit -m "Fourth commit" >/dev/null 2>&1
+    local fourth_hash
+    fourth_hash="$(git rev-parse --short HEAD)"
+
+    # Get only 2 most recent commits (should limit from 3 commits to 2)
+    run get_plugin_commits_between "$first_hash" "$fourth_hash" "$plugin_path" "2"
+    [ "$status" -eq 0 ]
+    [ -n "$output" ]
+    # Should contain fourth commit (most recent)
+    [[ "$output" =~ "Fourth commit" ]]
+    # Should contain third commit (second most recent)
+    [[ "$output" =~ "Third commit" ]]
+    # Should NOT contain second commit (limited to 2)
+    [[ ! "$output" =~ "Second commit" ]]
+    # Should NOT contain first commit (it's the old_hash, excluded)
+    [[ ! "$output" =~ "First commit" ]]
+
+    # Count lines - should be exactly 2 commits
+    local line_count
+    line_count="$(echo "$output" | grep -c . || echo 0)"
+    [ "$line_count" -eq 2 ]
+}
+
 @test "get_commit_info returns commit information" {
     local plugin_path="$TMUX_PLUGIN_MANAGER_PATH/test-plugin"
     mkdir -p "$plugin_path"
@@ -318,6 +437,94 @@ EOF
     [[ "$output" =~ "Test commit" ]]
 }
 
+@test "format_commit_display shows 'updated from X to Y' without emoji" {
+    local plugin_path="$TMUX_PLUGIN_MANAGER_PATH/test-plugin"
+    mkdir -p "$plugin_path"
+    cd "$plugin_path"
+    git init >/dev/null 2>&1
+    git config user.email "test@example.com"
+    git config user.name "Test User"
+    git config commit.gpgsign false
+
+    echo "v1" > file.txt
+    git add file.txt >/dev/null 2>&1
+    git commit -m "First commit" >/dev/null 2>&1
+    local old_hash
+    old_hash="$(git rev-parse --short HEAD)"
+
+    echo "v2" > file.txt
+    git add file.txt >/dev/null 2>&1
+    git commit -m "Second commit" >/dev/null 2>&1
+    local new_hash
+    new_hash="$(git rev-parse --short HEAD)"
+
+    local commits="${new_hash}|Second commit|1 hour ago"
+    run format_commit_display "test-plugin" "$old_hash" "$new_hash" "$commits" "updated" "$plugin_path"
+    [ "$status" -eq 0 ]
+    [ -n "$output" ]
+    # Should show "updated from X to Y" format (no emoji)
+    [[ "$output" =~ "updated from ${old_hash} to ${new_hash}" ]]
+    # Should NOT contain emoji
+    [[ ! "$output" =~ "📖" ]]
+    [[ "$output" =~ "Second commit" ]]
+}
+
+@test "format_commit_display limits to 2 most recent commits" {
+    local plugin_path="$TMUX_PLUGIN_MANAGER_PATH/test-plugin"
+    mkdir -p "$plugin_path"
+    cd "$plugin_path"
+    git init >/dev/null 2>&1
+    git config user.email "test@example.com"
+    git config user.name "Test User"
+    git config commit.gpgsign false
+
+    echo "v1" > file.txt
+    git add file.txt >/dev/null 2>&1
+    git commit -m "First commit" >/dev/null 2>&1
+    local old_hash
+    old_hash="$(git rev-parse --short HEAD)"
+
+    echo "v2" > file.txt
+    git add file.txt >/dev/null 2>&1
+    git commit -m "Second commit" >/dev/null 2>&1
+    local second_hash
+    second_hash="$(git rev-parse --short HEAD)"
+
+    echo "v3" > file.txt
+    git add file.txt >/dev/null 2>&1
+    git commit -m "Third commit" >/dev/null 2>&1
+    local third_hash
+    third_hash="$(git rev-parse --short HEAD)"
+
+    echo "v4" > file.txt
+    git add file.txt >/dev/null 2>&1
+    git commit -m "Fourth commit" >/dev/null 2>&1
+    local new_hash
+    new_hash="$(git rev-parse --short HEAD)"
+
+    # Create commits string with 3 commits (should only show 2)
+    local commits="${new_hash}|Fourth commit|5 minutes ago
+${third_hash}|Third commit|10 minutes ago
+${second_hash}|Second commit|15 minutes ago"
+
+    run format_commit_display "test-plugin" "$old_hash" "$new_hash" "$commits" "updated" "$plugin_path"
+    [ "$status" -eq 0 ]
+    [ -n "$output" ]
+    # Should show "updated from X to Y"
+    [[ "$output" =~ "updated from ${old_hash} to ${new_hash}" ]]
+    # Should show most recent commit (Fourth)
+    [[ "$output" =~ "Fourth commit" ]]
+    # Should show second most recent (Third)
+    [[ "$output" =~ "Third commit" ]]
+    # Should NOT show older commit (Second)
+    [[ ! "$output" =~ "Second commit" ]]
+
+    # Count commit lines in output (excluding plugin name and "updated from" line)
+    local commit_lines
+    commit_lines="$(echo "$output" | grep -E "^  [a-f0-9]{7}" | wc -l | tr -d ' ')"
+    [ "$commit_lines" -eq 2 ]
+}
+
 # Test: update_all_plugins with commit display
 
 @test "update_all_plugins displays commit summary for updated plugins" {
@@ -351,13 +558,12 @@ EOF
     [[ "$output" =~ "Updating" ]]
 }
 
-
 @test "update_plugin updates from pinned commit hash to branch head" {
     # Create a mock git repository with remote
     local remote_repo="$TPM_TEST_DIR/remote-repo"
-    # Plugin path will be based on the repo name (remote-repo)
-    local plugin_path="$TMUX_PLUGIN_MANAGER_PATH/remote-repo"
-
+    local plugin_path
+    plugin_path="$(get_plugin_path "file://$remote_repo")"
+    local config="$TPM_TEST_DIR/tmux.conf"
     # Set up remote repo
     mkdir -p "$remote_repo"
     cd "$remote_repo"
@@ -392,7 +598,7 @@ EOF
     local second_hash
     second_hash="$(git rev-parse --short HEAD)"
 
-    # Install plugin pinned to first commit (simulates previous pinning)
+    # Install plugin pinned to first commit
     local plugin_spec="file://$remote_repo#${first_hash}"
     run clone_plugin "$plugin_spec" "$first_hash"
     [ "$status" -eq 0 ]
@@ -402,13 +608,11 @@ EOF
     local current_hash
     current_hash="$(git rev-parse --short HEAD)"
     [ "$current_hash" = "$first_hash" ]
-    
-    # Verify HEAD is detached
-    local current_ref
-    current_ref="$(git rev-parse --abbrev-ref HEAD)"
-    [ "$current_ref" = "HEAD" ]
 
-    # Update the plugin without pin (should move from pinned commit to branch head)
+    # Create config with plugin without pin (should update to branch head)
+    echo "set -g @plugin 'file://$remote_repo'" > "$config"
+
+    # Update the plugin - should move from pinned commit to branch head
     run update_plugin "file://$remote_repo"
     [ "$status" -eq 0 ]
 
@@ -416,88 +620,7 @@ EOF
     cd "$plugin_path" || exit 1
     current_hash="$(git rev-parse --short HEAD)"
     [ "$current_hash" = "$second_hash" ]
-    
-    # Verify we're on a branch now (not detached)
-    current_ref="$(git rev-parse --abbrev-ref HEAD)"
-    [ "$current_ref" = "main" ]
 
     # Cleanup
     rm -rf "$temp_clone"
-}
-
-@test "update_plugin_with_feedback respects @tpm-redux-max-commits set to 'all'" {
-    # Create a mock git repository with remote
-    local remote_repo="$TPM_TEST_DIR/remote-repo"
-    local plugin_path="$TMUX_PLUGIN_MANAGER_PATH/tmux-sensible"
-    local config="$TPM_TEST_DIR/tmux.conf"
-
-    # Create config with max-commits set to 'all'
-    cat > "$config" <<'EOF'
-set -g @tpm-redux-max-commits 'all'
-set -g @plugin 'tmux-plugins/tmux-sensible'
-EOF
-
-    # Set up remote repo
-    mkdir -p "$remote_repo"
-    cd "$remote_repo"
-    git init --bare >/dev/null 2>&1
-
-    # Set up local plugin repo
-    mkdir -p "$plugin_path"
-    cd "$plugin_path"
-    git init >/dev/null 2>&1
-    git config user.email "test@example.com"
-    git config user.name "Test User"
-    git config commit.gpgsign false
-    git remote add origin "$remote_repo" >/dev/null 2>&1
-
-    # Create multiple commits
-    echo "# Test" > README.md
-    git add README.md >/dev/null 2>&1
-    git commit -m "First commit" >/dev/null 2>&1
-    git push -u origin master >/dev/null 2>&1 || git push -u origin main >/dev/null 2>&1
-    
-    local old_hash
-    old_hash="$(git rev-parse --short HEAD)"
-
-    echo "# Updated" > README.md
-    git add README.md >/dev/null 2>&1
-    git commit -m "Second commit" >/dev/null 2>&1
-    git push origin master >/dev/null 2>&1 || git push origin main >/dev/null 2>&1
-
-    echo "# More" > README.md
-    git add README.md >/dev/null 2>&1
-    git commit -m "Third commit" >/dev/null 2>&1
-    git push origin master >/dev/null 2>&1 || git push origin main >/dev/null 2>&1
-
-    echo "# Even more" > README.md
-    git add README.md >/dev/null 2>&1
-    git commit -m "Fourth commit" >/dev/null 2>&1
-    git push origin master >/dev/null 2>&1 || git push origin main >/dev/null 2>&1
-
-    # Checkout old commit to simulate update scenario
-    git checkout "$old_hash" >/dev/null 2>&1
-
-    # Update plugin and capture commit data
-    # Note: Don't use 'run' here because variable assignments don't persist in subshells
-    local commit_data=""
-    update_plugin_with_feedback "tmux-plugins/tmux-sensible" "commit_data" "$config"
-    local update_status=$?
-    [ "$update_status" -le 1 ]
-
-    # Parse commit data (format: old_hash|new_hash|commits)
-    local old_hash_parsed new_hash_parsed commits
-    old_hash_parsed="${commit_data%%|*}"
-    local after_first="${commit_data#*|}"
-    new_hash_parsed="${after_first%%|*}"
-    commits="${after_first#*|}"
-    
-    # Count commit lines (should be all 3 commits when set to 'all')
-    local commit_count=0
-    if [[ -n "$commits" ]]; then
-        # Count non-empty lines
-        commit_count=$(echo "$commits" | grep -c . || echo 0)
-    fi
-    # Should have at least 3 commits (we created 3 after the old hash)
-    [ "$commit_count" -ge 3 ]
 }

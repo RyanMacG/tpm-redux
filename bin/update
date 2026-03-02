@@ -349,6 +349,7 @@ display_commit_summary() {
 # Update all plugins from config file
 # Args:
 #   $1 - optional config path (defaults to detected config)
+# Uses TPM_PARALLEL=1 to run plugin updates in parallel (when multiple plugins)
 update_all_plugins() {
     local config_path="${1:-$(get_tmux_config_path)}"
     local plugins
@@ -367,6 +368,12 @@ update_all_plugins() {
     local new_hash
     local commits
     local status
+    local use_parallel="${TPM_PARALLEL:-0}"
+    local tmpdir
+    local result
+    local after_first
+    local first_pipe
+    local second_pipe
 
     # Get plugins list
     plugins="$(parse_plugins "$config_path")"
@@ -381,63 +388,85 @@ update_all_plugins() {
     echo "Updating $total_count plugin(s)..."
     echo ""
 
-    # Process each plugin
-    while IFS= read -r plugin_spec; do
-        [[ -z "$plugin_spec" ]] && continue
+    if [[ "$use_parallel" != "0" ]] && [[ "$total_count" -gt 1 ]]; then
+        # Parallel: run each update in background, collect output and commit data in config order
+        tmpdir="$(mktemp -d)"
+        current=0
+        while IFS= read -r plugin_spec; do
+            [[ -z "$plugin_spec" ]] && continue
+            ((current++))
+            (
+                local commit_data=""
+                update_plugin_with_feedback "$plugin_spec" "commit_data" "$config_path"
+                echo $? > "$tmpdir/$current.ret"
+                first_pipe="${commit_data%%|*}"
+                after_first="${commit_data#*|}"
+                second_pipe="${after_first%%|*}"
+                printf '%s' "${after_first#*|}" > "$tmpdir/$current.commits"
+                echo "$first_pipe" > "$tmpdir/$current.old"
+                echo "$second_pipe" > "$tmpdir/$current.new"
+            ) > "$tmpdir/$current.out" 2>&1 &
+        done <<< "$plugins"
+        wait
 
-        ((current++))
-
-        plugin_name="$(get_plugin_name "$plugin_spec")"
-        plugin_path="$(get_plugin_path "$plugin_spec")"
-        commit_data=""
-
-        # Update the plugin and capture commit data
-        update_plugin_with_feedback "$plugin_spec" "commit_data" "$config_path"
-        local result=$?
-
-        # Parse commit data (format: old_hash|new_hash|commits)
-        # Note: commits may contain newlines, so we need to handle parsing carefully
-        old_hash=""
-        new_hash=""
-        commits=""
-        if [[ -n "$commit_data" ]]; then
-            # Split on first two pipes only, rest is commits (which may contain newlines)
-            local first_pipe
-            local second_pipe
-            first_pipe="${commit_data%%|*}"
-            old_hash="$first_pipe"
-            local after_first="${commit_data#*|}"
-            second_pipe="${after_first%%|*}"
-            new_hash="$second_pipe"
-            # Everything after the second pipe is commits
-            commits="${after_first#*|}"
-        fi
-
-        # Determine status for commit display
-        case $result in
-            0)
-                ((updated_count++))
-                status="updated"
-                ;;
-            1)
-                ((up_to_date_count++))
-                status="up_to_date"
-                ;;
-            2)
-                ((not_installed_count++))
-                status="not_installed"
-                ;;
-            *)
-                ((error_count++))
-                status="error"
-                ;;
-        esac
-
-        # Store commit data for summary (only if plugin is installed)
-        if [[ $result -ne 2 ]]; then
-            commit_data_list+=("${plugin_spec}|${plugin_name}|${old_hash}|${new_hash}|${commits}|${status}|${plugin_path}")
-        fi
-    done <<< "$plugins"
+        current=0
+        while IFS= read -r plugin_spec; do
+            [[ -z "$plugin_spec" ]] && continue
+            ((current++))
+            [[ -f "$tmpdir/$current.out" ]] && cat "$tmpdir/$current.out"
+            result=2
+            [[ -f "$tmpdir/$current.ret" ]] && result=$(cat "$tmpdir/$current.ret")
+            plugin_name="$(get_plugin_name "$plugin_spec")"
+            plugin_path="$(get_plugin_path "$plugin_spec")"
+            old_hash=""
+            new_hash=""
+            commits=""
+            [[ -f "$tmpdir/$current.old" ]] && old_hash=$(cat "$tmpdir/$current.old")
+            [[ -f "$tmpdir/$current.new" ]] && new_hash=$(cat "$tmpdir/$current.new")
+            [[ -f "$tmpdir/$current.commits" ]] && commits=$(cat "$tmpdir/$current.commits")
+            case $result in
+                0) ((updated_count++)); status="updated" ;;
+                1) ((up_to_date_count++)); status="up_to_date" ;;
+                2) ((not_installed_count++)); status="not_installed" ;;
+                *) ((error_count++)); status="error" ;;
+            esac
+            if [[ $result -ne 2 ]]; then
+                commit_data_list+=("${plugin_spec}|${plugin_name}|${old_hash}|${new_hash}|${commits}|${status}|${plugin_path}")
+            fi
+        done <<< "$plugins"
+        rm -rf "$tmpdir"
+    else
+        # Sequential
+        while IFS= read -r plugin_spec; do
+            [[ -z "$plugin_spec" ]] && continue
+            ((current++))
+            plugin_name="$(get_plugin_name "$plugin_spec")"
+            plugin_path="$(get_plugin_path "$plugin_spec")"
+            commit_data=""
+            update_plugin_with_feedback "$plugin_spec" "commit_data" "$config_path"
+            result=$?
+            old_hash=""
+            new_hash=""
+            commits=""
+            if [[ -n "$commit_data" ]]; then
+                first_pipe="${commit_data%%|*}"
+                old_hash="$first_pipe"
+                after_first="${commit_data#*|}"
+                second_pipe="${after_first%%|*}"
+                new_hash="$second_pipe"
+                commits="${after_first#*|}"
+            fi
+            case $result in
+                0) ((updated_count++)); status="updated" ;;
+                1) ((up_to_date_count++)); status="up_to_date" ;;
+                2) ((not_installed_count++)); status="not_installed" ;;
+                *) ((error_count++)); status="error" ;;
+            esac
+            if [[ $result -ne 2 ]]; then
+                commit_data_list+=("${plugin_spec}|${plugin_name}|${old_hash}|${new_hash}|${commits}|${status}|${plugin_path}")
+            fi
+        done <<< "$plugins"
+    fi
 
     # Display commit summary
     if [[ ${#commit_data_list[@]} -gt 0 ]]; then
