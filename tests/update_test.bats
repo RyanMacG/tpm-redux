@@ -507,7 +507,7 @@ EOF
 ${third_hash}|Third commit|10 minutes ago
 ${second_hash}|Second commit|15 minutes ago"
 
-    run format_commit_display "test-plugin" "$old_hash" "$new_hash" "$commits" "updated" "$plugin_path"
+    NO_COLOR=1 run format_commit_display "test-plugin" "$old_hash" "$new_hash" "$commits" "updated" "$plugin_path"
     [ "$status" -eq 0 ]
     [ -n "$output" ]
     # Should show "updated from X to Y"
