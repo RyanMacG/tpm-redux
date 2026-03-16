@@ -307,3 +307,161 @@ EOF
     [ "$status" -eq 0 ]
     [ -z "$output" ]
 }
+
+# Test: parse_plugins follows source directives
+
+@test "parse_plugins follows source-file directive (absolute path)" {
+    local config="$TPM_TEST_DIR/tmux.conf"
+    local sourced="$TPM_TEST_DIR/plugins.conf"
+
+    echo "set -g @plugin 'user/plugin-a'" > "$sourced"
+    echo "source-file $sourced" > "$config"
+
+    run parse_plugins "$config"
+    [ "$status" -eq 0 ]
+    [ "$output" = "user/plugin-a" ]
+}
+
+@test "parse_plugins follows source directive (alias without -file)" {
+    local config="$TPM_TEST_DIR/tmux.conf"
+    local sourced="$TPM_TEST_DIR/plugins.conf"
+
+    echo "set -g @plugin 'user/plugin-b'" > "$sourced"
+    echo "source $sourced" > "$config"
+
+    run parse_plugins "$config"
+    [ "$status" -eq 0 ]
+    [ "$output" = "user/plugin-b" ]
+}
+
+@test "parse_plugins returns plugins from main and sourced file in order" {
+    local config="$TPM_TEST_DIR/tmux.conf"
+    local sourced="$TPM_TEST_DIR/plugins.conf"
+
+    echo "set -g @plugin 'user/sourced-plugin'" > "$sourced"
+    cat > "$config" <<EOF
+set -g @plugin 'user/main-plugin'
+source-file $sourced
+EOF
+
+    run parse_plugins "$config"
+    [ "$status" -eq 0 ]
+    [ "${lines[0]}" = "user/main-plugin" ]
+    [ "${lines[1]}" = "user/sourced-plugin" ]
+    [ "${#lines[@]}" -eq 2 ]
+}
+
+@test "parse_plugins follows nested sourcing (A -> B -> C)" {
+    local config="$TPM_TEST_DIR/tmux.conf"
+    local b="$TPM_TEST_DIR/b.conf"
+    local c="$TPM_TEST_DIR/c.conf"
+
+    echo "set -g @plugin 'user/deep-plugin'" > "$c"
+    echo "source-file $c" > "$b"
+    echo "source-file $b" > "$config"
+
+    run parse_plugins "$config"
+    [ "$status" -eq 0 ]
+    [ "$output" = "user/deep-plugin" ]
+}
+
+@test "parse_plugins handles circular reference without infinite loop" {
+    local a="$TPM_TEST_DIR/a.conf"
+    local b="$TPM_TEST_DIR/b.conf"
+
+    cat > "$a" <<EOF
+set -g @plugin 'user/plugin-a'
+source-file $b
+EOF
+    cat > "$b" <<EOF
+set -g @plugin 'user/plugin-b'
+source-file $a
+EOF
+
+    run parse_plugins "$a"
+    [ "$status" -eq 0 ]
+    [ "${#lines[@]}" -eq 2 ]
+    [[ "$output" == *"user/plugin-a"* ]]
+    [[ "$output" == *"user/plugin-b"* ]]
+}
+
+@test "parse_plugins handles self-referencing config without infinite loop" {
+    local config="$TPM_TEST_DIR/tmux.conf"
+
+    cat > "$config" <<EOF
+set -g @plugin 'user/plugin-a'
+source-file $config
+EOF
+
+    run parse_plugins "$config"
+    [ "$status" -eq 0 ]
+    [ "${#lines[@]}" -eq 1 ]
+    [ "$output" = "user/plugin-a" ]
+}
+
+@test "parse_plugins silently skips missing sourced file" {
+    local config="$TPM_TEST_DIR/tmux.conf"
+
+    cat > "$config" <<EOF
+source-file /nonexistent/path.conf
+set -g @plugin 'user/real-plugin'
+EOF
+
+    run parse_plugins "$config"
+    [ "$status" -eq 0 ]
+    [ "$output" = "user/real-plugin" ]
+}
+
+@test "parse_plugins resolves relative path in source-file directive" {
+    mkdir -p "$TPM_TEST_DIR/subdir"
+    local config="$TPM_TEST_DIR/tmux.conf"
+    local sourced="$TPM_TEST_DIR/subdir/plugins.conf"
+
+    echo "set -g @plugin 'user/relative-plugin'" > "$sourced"
+    echo "source-file subdir/plugins.conf" > "$config"
+
+    run parse_plugins "$config"
+    [ "$status" -eq 0 ]
+    [ "$output" = "user/relative-plugin" ]
+}
+
+@test "parse_plugins expands tilde in source-file path" {
+    export HOME="$TPM_TEST_DIR/home"
+    mkdir -p "$HOME"
+    local config="$TPM_TEST_DIR/tmux.conf"
+
+    echo "set -g @plugin 'user/tilde-plugin'" > "$HOME/plugins.conf"
+    echo "source-file ~/plugins.conf" > "$config"
+
+    run parse_plugins "$config"
+    [ "$status" -eq 0 ]
+    [ "$output" = "user/tilde-plugin" ]
+}
+
+@test "parse_plugins handles double-quoted path in source-file directive" {
+    local config="$TPM_TEST_DIR/tmux.conf"
+    local sourced="$TPM_TEST_DIR/plugins.conf"
+
+    echo "set -g @plugin 'user/quoted-plugin'" > "$sourced"
+    echo "source-file \"$sourced\"" > "$config"
+
+    run parse_plugins "$config"
+    [ "$status" -eq 0 ]
+    [ "$output" = "user/quoted-plugin" ]
+}
+
+@test "parse_plugins only includes plugins once when same file sourced twice" {
+    local config="$TPM_TEST_DIR/tmux.conf"
+    local sourced="$TPM_TEST_DIR/plugins.conf"
+
+    echo "set -g @plugin 'user/only-once'" > "$sourced"
+    cat > "$config" <<EOF
+source-file $sourced
+source-file $sourced
+EOF
+
+    run parse_plugins "$config"
+    [ "$status" -eq 0 ]
+    [ "${#lines[@]}" -eq 1 ]
+    [ "$output" = "user/only-once" ]
+}

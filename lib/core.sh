@@ -16,8 +16,79 @@ get_tmux_config_path() {
     fi
 }
 
+# Resolve a file path to its canonical absolute path
+# Falls back to the original path if resolution fails
+# Args:
+#   $1 - path to resolve
+_resolve_path() {
+    local path="$1"
+    if command -v realpath &>/dev/null; then
+        realpath "$path" 2>/dev/null || echo "$path"
+    else
+        readlink -f "$path" 2>/dev/null || echo "$path"
+    fi
+}
+
+# Global visited-files tracker for parse_plugins (reset on each top-level call)
+_TPM_PARSE_VISITED=""
+
+# Internal recursive helper for parse_plugins
+# Reads a config file, prints @plugin declarations, and follows source directives
+# Uses _TPM_PARSE_VISITED global to prevent duplicate/circular processing
+# Args:
+#   $1 - path to config file
+_parse_plugins_recursive() {
+    local config_file="$1"
+
+    [[ ! -f "$config_file" ]] && return 0
+
+    local canonical
+    canonical="$(_resolve_path "$config_file")"
+
+    # Skip if already visited (handles duplicates and circular references)
+    if [[ ":${_TPM_PARSE_VISITED}:" == *":${canonical}:"* ]]; then
+        return 0
+    fi
+
+    _TPM_PARSE_VISITED="${_TPM_PARSE_VISITED:+${_TPM_PARSE_VISITED}:}${canonical}"
+
+    local config_dir
+    config_dir="$(dirname "$config_file")"
+
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        # Skip comment lines
+        [[ "$line" =~ ^[[:space:]]*# ]] && continue
+
+        # Match @plugin declarations
+        if [[ "$line" =~ ^[[:space:]]*set(-option)?[[:space:]]+-g[[:space:]]+@plugin[[:space:]] ]]; then
+            local plugin
+            plugin=$(echo "$line" | awk '{plugin=$4; gsub(/["'"'"']/, "", plugin); print plugin}')
+            [[ -n "$plugin" ]] && echo "$plugin"
+            continue
+        fi
+
+        # Match source-file or source directives
+        if [[ "$line" =~ ^[[:space:]]*(source-file|source)[[:space:]] ]]; then
+            local sourced_path
+            sourced_path=$(echo "$line" | awk '{
+                sub(/^[[:space:]]*(source-file|source)[[:space:]]+/, "")
+                gsub(/^["'"'"']|["'"'"']$/, "")
+                print $1
+            }')
+            # Expand leading tilde
+            sourced_path="${sourced_path/#\~/$HOME}"
+            # Resolve relative paths relative to the config file's directory
+            if [[ "$sourced_path" != /* ]]; then
+                sourced_path="$config_dir/$sourced_path"
+            fi
+            _parse_plugins_recursive "$sourced_path"
+        fi
+    done < "$config_file"
+}
+
 # Parse plugin declarations from tmux config file
 # Extracts all 'set -g @plugin' lines and returns plugin names
+# Also follows source-file and source directives to find plugins in sourced files
 # Args:
 #   $1 - path to tmux config file
 parse_plugins() {
@@ -27,19 +98,8 @@ parse_plugins() {
         return 0
     fi
 
-    # Use awk for efficient single-pass parsing
-    # Matches: set -g @plugin 'name' or set-option -g @plugin "name"
-    awk '
-        /^[[:space:]]*set(-option)?[[:space:]]+-g[[:space:]]+@plugin[[:space:]]/ {
-            # Extract the plugin name (4th field)
-            plugin = $4
-            # Remove quotes (single or double)
-            gsub(/["'\'']/, "", plugin)
-            if (plugin != "") {
-                print plugin
-            }
-        }
-    ' "$config_file"
+    _TPM_PARSE_VISITED=""
+    _parse_plugins_recursive "$config_file"
 }
 
 # Get the plugin name from a plugin specification
