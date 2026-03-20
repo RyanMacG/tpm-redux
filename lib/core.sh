@@ -177,6 +177,35 @@ get_tpm_path() {
 }
 
 
+# Get the path to the lock file
+# Lock file lives alongside the plugins directory (one level up from it)
+get_lock_file_path() {
+    local tpm_path
+    tpm_path="$(get_tpm_path)"
+    echo "$(dirname "${tpm_path%/}")/tpm.lock"
+}
+
+# Parse the lock file, returning non-comment, non-blank lines
+# Returns 1 if no lock file exists
+parse_lock_file() {
+    local lock_file
+    lock_file="$(get_lock_file_path)"
+    [[ -f "$lock_file" ]] || return 1
+    grep -v '^#' "$lock_file" | grep -v '^[[:space:]]*$'
+}
+
+# Get the locked commit hash for a given plugin spec
+# Returns empty string if not found or no lock file
+get_locked_hash() {
+    local plugin_spec="$1"
+    parse_lock_file 2>/dev/null | while IFS=' ' read -r spec hash; do
+        if [[ "$spec" == "$plugin_spec" ]]; then
+            echo "$hash"
+            return
+        fi
+    done
+}
+
 # Get a tmux configuration value
 # Reads values like @tpm-redux-max-commits from tmux config file
 # Args:
