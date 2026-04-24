@@ -11,7 +11,7 @@ TPM Redux is a modern, performance-focused reimplementation of [TPM (Tmux Plugin
 ### Why TPM Redux?
 
 - 🚀 **Drop-in replacement** - Works with your existing `.tmux.conf`, no changes needed
-- ✅ **Well-tested** - 93 tests covering all functionality
+- ✅ **Well-tested** - 128 tests covering all functionality
 - 📦 **Modern codebase** - Clean, maintainable bash with proper error handling
 - 🔄 **Active development** - Built with future enhancements in mind
 - 📖 **Comprehensive docs** - Clear installation and usage instructions
@@ -20,7 +20,7 @@ TPM Redux is a modern, performance-focused reimplementation of [TPM (Tmux Plugin
 
 ## Status
 
-🎉 **v1.1.3 - Stable** - Production ready with 100% TPM feature parity!
+🎉 **v1.2.0 - Stable** - Production ready with 100% TPM feature parity!
 
 ## Features
 
@@ -33,13 +33,14 @@ TPM Redux is a modern, performance-focused reimplementation of [TPM (Tmux Plugin
 - ✅ **XDG config support** - Works with both `~/.tmux.conf` and `~/.config/tmux/tmux.conf`
 - ✅ **Branch specification** - Install specific versions with `user/repo#branch`
 - ✅ **100% TPM compatible** - Drop-in replacement for existing TPM installations
-- ✅ **93 passing tests** - Comprehensive test coverage
+- ✅ **128 passing tests** - Comprehensive test coverage
 - ✅ **Commit display UI** - See what changed in updated plugins with commit hashes, messages, and relative times (inspired by lazy.nvim)
+- ✅ **Parallel operations** - Faster installs/updates with `TPM_PARALLEL=1`
+- ✅ **Lock file support** - Reproducible installations with `tpm.lock` (`prefix + L`)
+- ✅ **Sourced config support** - Plugins in `source`d tmux config files are detected
 
 ### Enhanced Features (Coming Soon)
-- Parallel plugin operations for faster installs/updates
 - Plugin search and discovery
-- Lock file support for reproducible installations
 
 ## Requirements
 
@@ -235,7 +236,7 @@ We use [bats-core](https://github.com/bats-core/bats-core) for testing:
 ./run_tests.sh tests/core_test.bats
 ```
 
-Current test coverage: **93 passing tests** (100% of implemented features)
+Current test coverage: **128 passing tests** (100% of implemented features)
 
 ### Contributing
 
@@ -268,7 +269,13 @@ No configuration changes needed - your existing `.tmux.conf` works as-is!
 
 ## Release Notes
 
-### v1.1.3 (Current)
+### v1.2.0 (Current)
+- ✅ Parallel plugin operations (`TPM_PARALLEL=1`) - Up to 3-5x faster with many plugins
+- ✅ Lock file support - Generate `tpm.lock` with `prefix + L`, install uses pinned hashes automatically
+- ✅ Parse plugins from sourced tmux config files
+- ✅ 128 comprehensive tests
+
+### v1.1.3
 - 🐛 Fix: Handle quoted tilde in TPM path (#27)
   - TMUX_PLUGIN_MANAGER_PATH now correctly expands when set with single quotes
   - Manual tilde expansion for quoted paths (e.g., `export TMUX_PLUGIN_MANAGER_PATH='~/.tmux/plugins'`)

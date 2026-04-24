@@ -56,6 +56,13 @@ install_plugin_with_feedback() {
     plugin_name="$(get_plugin_name "$plugin_spec")"
     branch="$(get_plugin_branch "$plugin_spec")"
 
+    # Check for locked hash override
+    local locked_hash
+    locked_hash="$(get_locked_hash "$plugin_spec")"
+    if [[ -n "$locked_hash" ]]; then
+        branch="$locked_hash"
+    fi
+
     # Check if already installed
     if plugin_already_installed "$plugin_spec"; then
         format_plugin_output "$plugin_name" "already_installed"
@@ -97,7 +104,11 @@ install_all_plugins() {
         return 0
     fi
 
-    echo "Installing $total_count plugin(s)..."
+    if parse_lock_file >/dev/null 2>&1; then
+        echo "Installing $total_count plugin(s) [frozen mode - using tpm.lock]..."
+    else
+        echo "Installing $total_count plugin(s)..."
+    fi
     echo ""
 
     if [[ "$use_parallel" != "0" ]] && [[ "$total_count" -gt 1 ]]; then

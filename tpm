@@ -17,6 +17,7 @@ MINIMUM_TMUX_VERSION="1.9"
 DEFAULT_INSTALL_KEY="I"
 DEFAULT_UPDATE_KEY="U"
 DEFAULT_CLEAN_KEY="M-u"  # Alt+u
+DEFAULT_LOCK_KEY="L"
 
 # Compare two version strings
 # Returns 0 if version1 >= version2, 1 otherwise
@@ -147,6 +148,14 @@ setup_keybindings() {
         tmux bind-key "$clean_key" display-popup -E -w 80% -h 75% "$BINDINGS_DIR/clean_plugins" 2>/dev/null || true
     else
         tmux bind-key "$clean_key" split-window -v -p 30 "$BINDINGS_DIR/clean_plugins" 2>/dev/null || true
+    fi
+
+    # Lock plugins: prefix + L
+    local lock_key="${TPM_LOCK_KEY:-$DEFAULT_LOCK_KEY}"
+    if [[ "$use_popup" == true ]]; then
+        tmux bind-key "$lock_key" display-popup -E -w 80% -h 75% "$BINDINGS_DIR/lock_plugins" 2>/dev/null || true
+    else
+        tmux bind-key "$lock_key" split-window -v -p 30 "$BINDINGS_DIR/lock_plugins" 2>/dev/null || true
     fi
 }
 

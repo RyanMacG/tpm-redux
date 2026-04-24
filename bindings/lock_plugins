@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+
+# Keybinding wrapper for locking plugins
+
+CURRENT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+BIN_DIR="$CURRENT_DIR/../bin"
+
+"$BIN_DIR/lock"
+
+echo ""
+echo "press ENTER to close this pane"
+read -r
