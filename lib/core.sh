@@ -70,44 +70,40 @@ _parse_plugins_recursive() {
         # Match source-file or source directives
         # source-file [-Fnqv] [-t target-pane] path ...
         if [[ "$line" =~ ^[[:space:]]*(source-file|source)[[:space:]] ]]; then
-            local rest word skip_source expect_target
-            local -a src_paths=() tokens=()
-            rest=$(echo "$line" | awk '{
+            local source_args word
+            local -a sourced_paths=()
+
+            source_args=$(echo "$line" | awk '{
                 sub(/^[[:space:]]*(source-file|source)[[:space:]]+/, "")
                 print
             }')
-            read -ra tokens <<< "$rest"
-            skip_source=0
-            expect_target=0
-            for word in "${tokens[@]}"; do
-                if (( expect_target )); then
-                    expect_target=0
-                    continue
-                fi
-                word="${word#\"}"; word="${word%\"}"
-                word="${word#\'}"; word="${word%\'}"
-                if [[ "$word" =~ ^-[Fnqvt]+$ ]]; then
-                    [[ "$word" == *n* ]] && skip_source=1
-                    [[ "$word" == *t* ]] && expect_target=1
-                    continue
-                fi
-                src_paths+=("$word")
-            done
-            # -n means parse but do not execute: tmux loads no plugins, so skip
-            (( skip_source )) && continue
-            local p expanded _nullglob
+
+            # xargs performs shell-style quote removal (so "foo bar/a.conf"
+            # stays one token) but does not expand globs or run command
+            # substitutions, so glob patterns survive intact and user
+            # config is never executed.
+            while IFS= read -r word; do
+                [[ -z "$word" ]] && continue
+                [[ "$word" == -* ]] && continue
+                sourced_paths+=("$word")
+            done < <(printf '%s\n' "$source_args" | xargs printf '%s\n')
+
+            local path expanded
             local -a matches=()
-            _nullglob=$(shopt -p nullglob)
-            shopt -s nullglob
-            for p in "${src_paths[@]}"; do
-                p="${p/#\~/$HOME}"
-                [[ "$p" != /* ]] && p="$config_dir/$p"
-                matches=($p)
+            for path in "${sourced_paths[@]}"; do
+                # Expand a leading ~ to $HOME.
+                path="${path/#\~/$HOME}"
+                # Resolve relative paths against the sourcing file's dir.
+                [[ "$path" != /* ]] && path="$config_dir/$path"
+                # compgen -G expands a glob pattern (or matches a literal
+                # path) one match per line; mapfile reads them without word
+                # splitting, so filenames with spaces survive intact. A
+                # pattern that matches nothing yields an empty list.
+                mapfile -t matches < <(compgen -G "$path")
                 for expanded in "${matches[@]}"; do
                     _parse_plugins_recursive "$expanded"
                 done
             done
-            eval "$_nullglob"
         fi
     done < "$config_file"
 }

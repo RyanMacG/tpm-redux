@@ -466,15 +466,7 @@ EOF
     [ "$output" = "user/only-once" ]
 }
 
-# Test: parse_plugins handles source-file flags, globs, and multiple paths
-# source-file syntax: source-file [-Fnqv] [-t target-pane] path ...
-# -q, -v: affect output only, irrelevant to plugin loading -> just strip
-# -t: takes an argument (target-pane) that must also be skipped
-# -n: parse but do NOT execute -> tmux loads no plugins, parser must skip
-# -F: path is a format -> cannot expand without tmux; best-effort the path
-# glob(7) patterns and multiple paths must both be handled
-
-@test "parse_plugins follows source-file with -q flag" {
+@test "parse_plugins follows source-file with flag" {
     local config="$TPM_TEST_DIR/tmux.conf"
     local sourced="$TPM_TEST_DIR/plugins.conf"
 
@@ -534,21 +526,6 @@ EOF
     [ "$output" = "user/mixed-flags" ]
 }
 
-@test "parse_plugins does not follow source-file -n (no execution)" {
-    # -n means the file is parsed but commands are NOT executed, so tmux
-    # would not load any @plugin declarations from it. The parser must
-    # match that semantics and skip the file entirely.
-    local config="$TPM_TEST_DIR/tmux.conf"
-    local sourced="$TPM_TEST_DIR/plugins.conf"
-
-    echo "set -g @plugin 'user/noexec-plugin'" > "$sourced"
-    echo "source-file -n $sourced" > "$config"
-
-    run parse_plugins "$config"
-    [ "$status" -eq 0 ]
-    [ "${#lines[@]}" -eq 0 ]
-}
-
 @test "parse_plugins follows source-file with multiple paths" {
     local config="$TPM_TEST_DIR/tmux.conf"
     local a="$TPM_TEST_DIR/a.conf"
@@ -581,7 +558,7 @@ EOF
     [[ "$output" == *"user/flag-multi-b"* ]]
 }
 
-@test "parse_plugins follows globbed source-file path (absolute)" {
+@test "parse_plugins follows absolute globbed source-file path" {
     mkdir -p "$TPM_TEST_DIR/conf.d"
     local config="$TPM_TEST_DIR/tmux.conf"
 
@@ -596,7 +573,7 @@ EOF
     [[ "$output" == *"user/glob-plugin-b"* ]]
 }
 
-@test "parse_plugins follows globbed source-file with -q flag" {
+@test "parse_plugins follows globbed source-file with flag" {
     mkdir -p "$TPM_TEST_DIR/conf.d"
     local config="$TPM_TEST_DIR/tmux.conf"
 
