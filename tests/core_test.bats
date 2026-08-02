@@ -428,6 +428,7 @@ EOF
 @test "parse_plugins expands tilde in source-file path" {
     export HOME="$TPM_TEST_DIR/home"
     mkdir -p "$HOME"
+    sync_server_home
     local config="$TPM_TEST_DIR/tmux.conf"
 
     echo "set -g @plugin 'user/tilde-plugin'" > "$HOME/plugins.conf"
@@ -542,7 +543,7 @@ EOF
     [[ "$output" == *"user/multi-b"* ]]
 }
 
-@test "parse_plugins follows source-file with flags and multiple paths" {
+@test "parse_plugins follows source-file with flags and multiple paths in order" {
     local config="$TPM_TEST_DIR/tmux.conf"
     local a="$TPM_TEST_DIR/a.conf"
     local b="$TPM_TEST_DIR/b.conf"
@@ -554,8 +555,9 @@ EOF
     run parse_plugins "$config"
     [ "$status" -eq 0 ]
     [ "${#lines[@]}" -eq 2 ]
-    [[ "$output" == *"user/flag-multi-a"* ]]
-    [[ "$output" == *"user/flag-multi-b"* ]]
+    # Flags do not reorder the paths: a is still processed before b.
+    [ "${lines[0]}" = "user/flag-multi-a" ]
+    [ "${lines[1]}" = "user/flag-multi-b" ]
 }
 
 @test "parse_plugins follows absolute globbed source-file path" {
@@ -591,6 +593,7 @@ EOF
 @test "parse_plugins follows globbed source-file with tilde path" {
     export HOME="$TPM_TEST_DIR/home"
     mkdir -p "$HOME/.tmux/conf.d"
+    sync_server_home
     local config="$TPM_TEST_DIR/tmux.conf"
 
     echo "set -g @plugin 'user/tilde-glob-a'" > "$HOME/.tmux/conf.d/a.conf"
@@ -670,4 +673,55 @@ EOF
     [ "$status" -eq 0 ]
     [ "${#lines[@]}" -eq 1 ]
     [ "$output" = "user/shared-plugin" ]
+}
+
+@test "parse_plugins deduplicates a file sourced at different nesting depths" {
+    # Diamond include graph: main -> A, main -> B, A -> shared, B -> shared.
+    # shared's plugin must appear once, at its first-encounter position
+    # (inside A, before B is ever visited).
+    local config="$TPM_TEST_DIR/tmux.conf"
+    local a="$TPM_TEST_DIR/a.conf"
+    local b="$TPM_TEST_DIR/b.conf"
+    local shared="$TPM_TEST_DIR/shared.conf"
+
+    echo "set -g @plugin 'user/shared-plugin'" > "$shared"
+    printf "set -g @plugin 'user/a-only'\nsource-file $shared\n" > "$a"
+    printf "set -g @plugin 'user/b-only'\nsource-file $shared\n" > "$b"
+    printf "set -g @plugin 'user/main'\nsource-file $a\nsource-file $b\n" > "$config"
+
+    run parse_plugins "$config"
+    [ "$status" -eq 0 ]
+    [ "${#lines[@]}" -eq 4 ]
+    # Depth-first, first-encounter order: main, a-only, shared, b-only.
+    # shared must NOT reappear when B is processed later.
+    [ "${lines[0]}" = "user/main" ]
+    [ "${lines[1]}" = "user/a-only" ]
+    [ "${lines[2]}" = "user/shared-plugin" ]
+    [ "${lines[3]}" = "user/b-only" ]
+}
+
+@test "parse_plugins preserves order across siblings with a shared nested file" {
+    # main -> A -> C ; main -> B -> D.  Each branch is depth-first, so the
+    # overall order is: a-only, c-only, b-only, d-only. Verifies that sibling
+    # branches are not interleaved and that nested plugins appear before the
+    # next sibling's plugins.
+    local config="$TPM_TEST_DIR/tmux.conf"
+    local a="$TPM_TEST_DIR/a.conf"
+    local b="$TPM_TEST_DIR/b.conf"
+    local c="$TPM_TEST_DIR/c.conf"
+    local d="$TPM_TEST_DIR/d.conf"
+
+    echo "set -g @plugin 'user/c-only'" > "$c"
+    echo "set -g @plugin 'user/d-only'" > "$d"
+    printf "set -g @plugin 'user/a-only'\nsource-file $c\n" > "$a"
+    printf "set -g @plugin 'user/b-only'\nsource-file $d\n" > "$b"
+    printf "source-file $a\nsource-file $b\n" > "$config"
+
+    run parse_plugins "$config"
+    [ "$status" -eq 0 ]
+    [ "${#lines[@]}" -eq 4 ]
+    [ "${lines[0]}" = "user/a-only" ]
+    [ "${lines[1]}" = "user/c-only" ]
+    [ "${lines[2]}" = "user/b-only" ]
+    [ "${lines[3]}" = "user/d-only" ]
 }
