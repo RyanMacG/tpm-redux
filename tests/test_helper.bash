@@ -2,38 +2,37 @@
 
 # Test helper functions for TPM Redux tests
 
-# Give each test file its own private tmux server on a separate socket.
-#
-# Having access to a tmux server calling tmux commands such as source-file
-# for parsing configuration.
-# 
-# Two things have to line up for bare `tmux` calls to hit the private server
-# (and, crucially, for `kill-server` to tear down only it):
-#   - TMUX_TMPDIR redirects tmux's default socket into a private directory; and
-#   - TMUX is unset, otherwise it pins bare `tmux` at the *current* session's
-#     server (the user's live one) and overrides TMUX_TMPDIR. Forgetting this
-#     makes `teardown_file`'s kill-server destroy the user's tmux session.
-# The server inherits this process's HOME and is killed in teardown_file.
-setup_file() {
-    # Redirect default tmux socket to private directory
-    local tmpdir
-    tmpdir="$(mktemp -d)"
-    export TMUX_TMPDIR="$tmpdir"
-    export TPM_TEST_TMPDIR="$tmpdir"
+# Save the tmux state, in case we are running in an existing tmux session
+_TPM_TEST_SAVED_TMUX=""
 
-    # Unset TMUX to isolate from any existing tmux server
+setup_tmux_server() {
+    # Save and drop TMUX so the test client does not reuse the host socket.
+    _TPM_TEST_SAVED_TMUX="${TMUX-}"
     unset TMUX
-    tmux new-session -d -s tpm-parse-test 'sleep 86400' >/dev/null 2>&1 || true
+
+    if [[ -z "${TMUX_TMPDIR:-}" ]]; then
+        local tmpdir
+        tmpdir="$(mktemp -d)"
+        export TMUX_TMPDIR="$tmpdir"
+    fi
+
+    tmux new-session -d >/dev/null 2>&1 || true
 }
 
-teardown_file() {
+teardown_tmux_server() {
+    # Ensure we don't kill the host tmux server
+    unset TMUX
+
     if [[ -n "${TMUX_TMPDIR:-}" ]]; then
         tmux kill-server >/dev/null 2>&1 || true
+        rm -rf "$TMUX_TMPDIR" >/dev/null 2>&1 || true
         unset TMUX_TMPDIR
     fi
-    if [[ -n "${TPM_TEST_TMPDIR:-}" && -d "${TPM_TEST_TMPDIR:-}" ]]; then
-        rm -rf "$TPM_TEST_TMPDIR" 2>/dev/null || true
+
+    if [[ -n "$_TPM_TEST_SAVED_TMUX" ]]; then
+        export TMUX="$_TPM_TEST_SAVED_TMUX"
     fi
+    _TPM_TEST_SAVED_TMUX=""
 }
 
 # Get the project root directory
@@ -54,12 +53,7 @@ teardown_temp_dir() {
     fi
 }
 
-# Point this file's tmux server at the current HOME.
-#
-# tmux expands a leading ~ in source-file paths against the server's HOME,
-# which is fixed when the server starts in setup_file. Tests that override
-# HOME to a temp dir must sync the server's HOME too for ~ to resolve there.
-# No restore is needed: the server is owned and killed in teardown_file.
+# Point tmux server at current $HOME -- use when tests override $HOME
 sync_server_home() {
     tmux set-environment -g HOME "$HOME" >/dev/null 2>&1 || true
 }

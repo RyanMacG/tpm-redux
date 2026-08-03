@@ -4,6 +4,14 @@
 
 load test_helper
 
+setup_file() {
+    setup_tmux_server
+}
+
+teardown_file() {
+    teardown_tmux_server
+}
+
 setup() {
     setup_temp_dir
     export PROJECT_ROOT=$(get_project_root)

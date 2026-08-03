@@ -29,48 +29,47 @@ _resolve_path() {
     fi
 }
 
-# Global visited-files tracker for parse_plugins (reset on each top-level call)
-_TPM_PARSE_VISITED=""
-
 # Internal recursive helper for parse_plugins
-# Parses one config file via `tmux source-file`, prints its @plugin declarations,
-# and follows source-file directives into the files they resolve to.
-# _TPM_PARSE_VISITED guards against duplicate and circular includes.
 #
-# Example `tmux source-file -nv` output line:
+# Parses output of `tmux source-file`, prints @plugin declarations,
+# and recursively follows source-file directives.
+#
+# _TPM_PARSE_VISITED (an associative array declared by parse_plugins) guards
+# against duplicate and circular includes.
+#
+# Example `tmux source-file -nqv` output line:
 # /home/user/.tmux.conf:14: set -g @plugin 'schasse/tmux-jump'
 #
 # Args:
-#   $1 - path to config file
+#   $1 - raw source-file args: may include flags with one or more absolute, relative, or glob paths
+#   $2 - optional config directory for resolving relative paths
 _parse_plugins_recursive() {
-    local config_file="$1"
+    local source_args="$1"
+    local config_dir="$2"
 
-    [[ ! -f "$config_file" ]] && return 0
+    [[ -z "$source_args" ]] && return 0
 
-    local canonical
-    canonical="$(_resolve_path "$config_file")"
+    local line cmd plugin next_source_args next_config_dir path file
+    local -A prev_visited=() # snapshot of visited files from previous calls
 
-    # Skip if already visited (handles duplicates and circular references)
-    if [[ ":${_TPM_PARSE_VISITED}:" == *":${canonical}:"* ]]; then
-        return 0
-    fi
-
-    _TPM_PARSE_VISITED="${_TPM_PARSE_VISITED:+${_TPM_PARSE_VISITED}:}${canonical}"
-
-    local config_dir
-    config_dir="$(dirname "$canonical")"
-
-    local line cmd plugin args_str word path
-    local -a args sourced_paths
-    local seen
+    for file in "${!_TPM_PARSE_VISITED[@]}"; do
+        prev_visited["$file"]=true
+    done
 
     while IFS= read -r line || [[ -n "$line" ]]; do
-        # Drop the "<path>:<lineno>: " prefix tmux prints with -v.
+        # match `path` and `cmd` from "<path>:<lineno>: <cmd>"
         [[ "$line" =~ ^(.+):[0-9]+:\ (.*)$ ]] || continue
+        path="${BASH_REMATCH[1]}"
         cmd="${BASH_REMATCH[2]}"
 
-        # @plugin declarations: tmux normalises to "set-option", strips surrounding
-        # quotes, re-quotes when values contain special chars like '#'
+        # Mark path as visited
+        [[ -n "$path" && ! -v _TPM_PARSE_VISITED["$path"] ]] && _TPM_PARSE_VISITED["$path"]=true
+
+        # Skip paths already visited in previous calls, but not this call, to ensure we finish the loop
+        [[ -n "$path" && -v prev_visited["$path"] ]] && continue
+
+        # @plugin declarations: tmux normalises `set` to `set-option`, strips
+        # surrounding quotes, re-quotes when values contain special chars like '#'
         if [[ "$cmd" =~ ^set-option\ -g\ @plugin\ (.+)$ ]]; then
             plugin="${BASH_REMATCH[1]}"
             # Strip quotes, if needed.
@@ -79,44 +78,20 @@ _parse_plugins_recursive() {
             continue
         fi
 
-        # source-file directives: tmux normalises to "source-file". Repeat
-        # `tmux source-file` parsing for all args to resolve globs, ~, relative
-        # paths, and flags, then recurse into each matched file.
+        # source-file directives: tmux normalises `source` to `source-file`
         if [[ "$cmd" =~ ^source-file\ (.+)$ ]]; then
-            args_str="${BASH_REMATCH[1]}"
-            args=()
-            # Use xargs for word splitting to preserve quoted words
-            # without expanding globs or running command substitutions
-            while IFS= read -r word; do
-                [[ -n "$word" ]] && args+=("$word")
-            done < <(printf '%s\n' "$args_str" | xargs printf '%s\n')
-            (( ${#args[@]} )) || continue
+            next_source_args="${BASH_REMATCH[1]}"
+            next_config_dir="$(dirname "$path")"
 
-            sourced_paths=()
-            seen=""
-            # Run from the sourcing file's directory so relative paths resolve
-            # the same way as tmux sourcing.
-            while IFS= read -r path; do
-                # Each printed command carries a "<path>:<lineno>: " prefix;
-                # the path is the matched file we recurse into.
-                [[ "$path" =~ ^(.+):[0-9]+:\ (.*)$ ]] || continue
-                path="${BASH_REMATCH[1]}"
-
-                # Skip over paths already seen
-                [[ ":$seen:" == *":$path:"* ]] && continue
-                
-                seen="${seen:+$seen:}$path"
-                sourced_paths+=("$path")
-            done < <( ( cd "$config_dir" && tmux source-file -nqv "${args[@]}" ) 2>/dev/null )
-
-            for path in "${sourced_paths[@]}"; do
-                _parse_plugins_recursive "$path"
-            done
+            _parse_plugins_recursive "$next_source_args" "$next_config_dir"
         fi
-    done < <(tmux source-file -nqv "$config_file" 2>/dev/null)
+
+    # cd to config directory, if supplied, to resolve relative paths
+    # Pass the raw $source_args value back to tmux source-file unquoted to expand args
+    done < <( [[ -d "$config_dir" ]] && cd "$config_dir"; tmux source-file -nqv $source_args 2>/dev/null)
 }
 
-# Parse plugin declarations from a tmux config file.
+# Parse plugin declarations from tmux config files.
 # Extracts all 'set -g @plugin' lines and returns plugin names, following
 # source-file/source directives (including globs, ~, flags and nested
 # includes) into the files they reference.
@@ -129,7 +104,7 @@ parse_plugins() {
         return 0
     fi
 
-    _TPM_PARSE_VISITED=""
+    local -A _TPM_PARSE_VISITED=()
     _parse_plugins_recursive "$config_file"
 }
 
