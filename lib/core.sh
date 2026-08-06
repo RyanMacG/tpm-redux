@@ -88,7 +88,7 @@ _parse_plugins_recursive() {
 
     # cd to config directory, if supplied, to resolve relative paths
     # Pass the raw $source_args value back to tmux source-file unquoted to expand args
-    done < <( [[ -d "$config_dir" ]] && cd "$config_dir"; tmux source-file -nqv $source_args 2>/dev/null)
+    done < <( [[ -d "$config_dir" ]] && cd "$config_dir" || true; tmux source-file -nqv $source_args 2>/dev/null)
 }
 
 # Parse plugin declarations from tmux config files.
