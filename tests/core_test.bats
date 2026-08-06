@@ -4,6 +4,14 @@
 
 load test_helper
 
+setup_file() {
+    setup_tmux_server
+}
+
+teardown_file() {
+    teardown_tmux_server
+}
+
 setup() {
     setup_temp_dir
     export PROJECT_ROOT=$(get_project_root)
@@ -428,6 +436,7 @@ EOF
 @test "parse_plugins expands tilde in source-file path" {
     export HOME="$TPM_TEST_DIR/home"
     mkdir -p "$HOME"
+    sync_server_home
     local config="$TPM_TEST_DIR/tmux.conf"
 
     echo "set -g @plugin 'user/tilde-plugin'" > "$HOME/plugins.conf"
@@ -464,4 +473,263 @@ EOF
     [ "$status" -eq 0 ]
     [ "${#lines[@]}" -eq 1 ]
     [ "$output" = "user/only-once" ]
+}
+
+@test "parse_plugins follows source-file with flag" {
+    local config="$TPM_TEST_DIR/tmux.conf"
+    local sourced="$TPM_TEST_DIR/plugins.conf"
+
+    echo "set -g @plugin 'user/quiet-plugin'" > "$sourced"
+    echo "source-file -q $sourced" > "$config"
+
+    run parse_plugins "$config"
+    [ "$status" -eq 0 ]
+    [ "$output" = "user/quiet-plugin" ]
+}
+
+@test "parse_plugins follows source-file with combined short flags" {
+    local config="$TPM_TEST_DIR/tmux.conf"
+    local sourced="$TPM_TEST_DIR/plugins.conf"
+
+    echo "set -g @plugin 'user/combined-flags'" > "$sourced"
+    echo "source-file -qv $sourced" > "$config"
+
+    run parse_plugins "$config"
+    [ "$status" -eq 0 ]
+    [ "$output" = "user/combined-flags" ]
+}
+
+@test "parse_plugins follows source-file with separate flags" {
+    local config="$TPM_TEST_DIR/tmux.conf"
+    local sourced="$TPM_TEST_DIR/plugins.conf"
+
+    echo "set -g @plugin 'user/separate-flags'" > "$sourced"
+    echo "source-file -q -v $sourced" > "$config"
+
+    run parse_plugins "$config"
+    [ "$status" -eq 0 ]
+    [ "$output" = "user/separate-flags" ]
+}
+
+@test "parse_plugins follows source-file with -t target-pane flag" {
+    local config="$TPM_TEST_DIR/tmux.conf"
+    local sourced="$TPM_TEST_DIR/plugins.conf"
+
+    echo "set -g @plugin 'user/target-plugin'" > "$sourced"
+    echo "source-file -t target-pane $sourced" > "$config"
+
+    run parse_plugins "$config"
+    [ "$status" -eq 0 ]
+    [ "$output" = "user/target-plugin" ]
+}
+
+@test "parse_plugins follows source-file with mixed flags and target" {
+    local config="$TPM_TEST_DIR/tmux.conf"
+    local sourced="$TPM_TEST_DIR/plugins.conf"
+
+    echo "set -g @plugin 'user/mixed-flags'" > "$sourced"
+    echo "source-file -q -t target-pane $sourced" > "$config"
+
+    run parse_plugins "$config"
+    [ "$status" -eq 0 ]
+    [ "$output" = "user/mixed-flags" ]
+}
+
+@test "parse_plugins follows source-file with multiple paths" {
+    local config="$TPM_TEST_DIR/tmux.conf"
+    local a="$TPM_TEST_DIR/a.conf"
+    local b="$TPM_TEST_DIR/b.conf"
+
+    echo "set -g @plugin 'user/multi-a'" > "$a"
+    echo "set -g @plugin 'user/multi-b'" > "$b"
+    echo "source-file $a $b" > "$config"
+
+    run parse_plugins "$config"
+    [ "$status" -eq 0 ]
+    [ "${#lines[@]}" -eq 2 ]
+    [[ "$output" == *"user/multi-a"* ]]
+    [[ "$output" == *"user/multi-b"* ]]
+}
+
+@test "parse_plugins follows source-file with flags and multiple paths in order" {
+    local config="$TPM_TEST_DIR/tmux.conf"
+    local a="$TPM_TEST_DIR/a.conf"
+    local b="$TPM_TEST_DIR/b.conf"
+
+    echo "set -g @plugin 'user/flag-multi-a'" > "$a"
+    echo "set -g @plugin 'user/flag-multi-b'" > "$b"
+    echo "source-file -q $a $b" > "$config"
+
+    run parse_plugins "$config"
+    [ "$status" -eq 0 ]
+    [ "${#lines[@]}" -eq 2 ]
+    # Flags do not reorder the paths: a is still processed before b.
+    [ "${lines[0]}" = "user/flag-multi-a" ]
+    [ "${lines[1]}" = "user/flag-multi-b" ]
+}
+
+@test "parse_plugins follows absolute globbed source-file path" {
+    mkdir -p "$TPM_TEST_DIR/conf.d"
+    local config="$TPM_TEST_DIR/tmux.conf"
+
+    echo "set -g @plugin 'user/glob-plugin-a'" > "$TPM_TEST_DIR/conf.d/a.conf"
+    echo "set -g @plugin 'user/glob-plugin-b'" > "$TPM_TEST_DIR/conf.d/b.conf"
+    echo "source-file $TPM_TEST_DIR/conf.d/*.conf" > "$config"
+
+    run parse_plugins "$config"
+    [ "$status" -eq 0 ]
+    [ "${#lines[@]}" -eq 2 ]
+    [[ "$output" == *"user/glob-plugin-a"* ]]
+    [[ "$output" == *"user/glob-plugin-b"* ]]
+}
+
+@test "parse_plugins follows globbed source-file with flag" {
+    mkdir -p "$TPM_TEST_DIR/conf.d"
+    local config="$TPM_TEST_DIR/tmux.conf"
+
+    echo "set -g @plugin 'user/glob-one'" > "$TPM_TEST_DIR/conf.d/plugins.conf"
+    echo "set -g @plugin 'user/glob-two'" > "$TPM_TEST_DIR/conf.d/other.conf"
+    echo "source-file -q $TPM_TEST_DIR/conf.d/*.conf" > "$config"
+
+    run parse_plugins "$config"
+    [ "$status" -eq 0 ]
+    [ "${#lines[@]}" -eq 2 ]
+    [[ "$output" == *"user/glob-one"* ]]
+    [[ "$output" == *"user/glob-two"* ]]
+}
+
+@test "parse_plugins follows globbed source-file with tilde path" {
+    export HOME="$TPM_TEST_DIR/home"
+    mkdir -p "$HOME/.tmux/conf.d"
+    sync_server_home
+    local config="$TPM_TEST_DIR/tmux.conf"
+
+    echo "set -g @plugin 'user/tilde-glob-a'" > "$HOME/.tmux/conf.d/a.conf"
+    echo "set -g @plugin 'user/tilde-glob-b'" > "$HOME/.tmux/conf.d/b.conf"
+    echo "source-file ~/.tmux/conf.d/*.conf" > "$config"
+
+    run parse_plugins "$config"
+    [ "$status" -eq 0 ]
+    [ "${#lines[@]}" -eq 2 ]
+    [[ "$output" == *"user/tilde-glob-a"* ]]
+    [[ "$output" == *"user/tilde-glob-b"* ]]
+}
+
+@test "parse_plugins follows relative globbed source-file path" {
+    mkdir -p "$TPM_TEST_DIR/subdir"
+    local config="$TPM_TEST_DIR/tmux.conf"
+
+    echo "set -g @plugin 'user/relative-glob-a'" > "$TPM_TEST_DIR/subdir/a.conf"
+    echo "set -g @plugin 'user/relative-glob-b'" > "$TPM_TEST_DIR/subdir/b.conf"
+    echo "source-file subdir/*.conf" > "$config"
+
+    run parse_plugins "$config"
+    [ "$status" -eq 0 ]
+    [ "${#lines[@]}" -eq 2 ]
+    [[ "$output" == *"user/relative-glob-a"* ]]
+    [[ "$output" == *"user/relative-glob-b"* ]]
+}
+
+@test "parse_plugins silently skips globbed source-file matching no files" {
+    mkdir -p "$TPM_TEST_DIR/conf.d"
+    local config="$TPM_TEST_DIR/tmux.conf"
+
+    echo "source-file $TPM_TEST_DIR/conf.d/*.conf" > "$config"
+    echo "set -g @plugin 'user/main-plugin'" >> "$config"
+
+    run parse_plugins "$config"
+    [ "$status" -eq 0 ]
+    [ "${#lines[@]}" -eq 1 ]
+    [ "$output" = "user/main-plugin" ]
+}
+
+@test "parse_plugins expands globbed source-file alongside explicit sourced files" {
+    mkdir -p "$TPM_TEST_DIR/conf.d"
+    local config="$TPM_TEST_DIR/tmux.conf"
+    local explicit="$TPM_TEST_DIR/explicit.conf"
+
+    echo "set -g @plugin 'user/explicit-plugin'" > "$explicit"
+    echo "set -g @plugin 'user/globbed-a'" > "$TPM_TEST_DIR/conf.d/a.conf"
+    echo "set -g @plugin 'user/globbed-b'" > "$TPM_TEST_DIR/conf.d/b.conf"
+    cat > "$config" <<EOF
+set -g @plugin 'user/main-plugin'
+source-file $explicit
+source-file $TPM_TEST_DIR/conf.d/*.conf
+EOF
+
+    run parse_plugins "$config"
+    [ "$status" -eq 0 ]
+    [ "${#lines[@]}" -eq 4 ]
+    [[ "$output" == *"user/main-plugin"* ]]
+    [[ "$output" == *"user/explicit-plugin"* ]]
+    [[ "$output" == *"user/globbed-a"* ]]
+    [[ "$output" == *"user/globbed-b"* ]]
+}
+
+@test "parse_plugins does not duplicate plugins from glob and explicit source" {
+    mkdir -p "$TPM_TEST_DIR/conf.d"
+    local config="$TPM_TEST_DIR/tmux.conf"
+    local shared="$TPM_TEST_DIR/conf.d/shared.conf"
+
+    echo "set -g @plugin 'user/shared-plugin'" > "$shared"
+    cat > "$config" <<EOF
+source-file $shared
+source-file $TPM_TEST_DIR/conf.d/*.conf
+EOF
+
+    run parse_plugins "$config"
+    [ "$status" -eq 0 ]
+    [ "${#lines[@]}" -eq 1 ]
+    [ "$output" = "user/shared-plugin" ]
+}
+
+@test "parse_plugins deduplicates a file sourced at different nesting depths" {
+    # Diamond include graph: main -> A, main -> B, A -> shared, B -> shared.
+    # shared's plugin must appear once, at its first-encounter position
+    # (inside A, before B is ever visited).
+    local config="$TPM_TEST_DIR/tmux.conf"
+    local a="$TPM_TEST_DIR/a.conf"
+    local b="$TPM_TEST_DIR/b.conf"
+    local shared="$TPM_TEST_DIR/shared.conf"
+
+    echo "set -g @plugin 'user/shared-plugin'" > "$shared"
+    printf "set -g @plugin 'user/a-only'\nsource-file $shared\n" > "$a"
+    printf "set -g @plugin 'user/b-only'\nsource-file $shared\n" > "$b"
+    printf "set -g @plugin 'user/main'\nsource-file $a\nsource-file $b\n" > "$config"
+
+    run parse_plugins "$config"
+    [ "$status" -eq 0 ]
+    [ "${#lines[@]}" -eq 4 ]
+    # Depth-first, first-encounter order: main, a-only, shared, b-only.
+    # shared must NOT reappear when B is processed later.
+    [ "${lines[0]}" = "user/main" ]
+    [ "${lines[1]}" = "user/a-only" ]
+    [ "${lines[2]}" = "user/shared-plugin" ]
+    [ "${lines[3]}" = "user/b-only" ]
+}
+
+@test "parse_plugins preserves order across siblings with a shared nested file" {
+    # main -> A -> C ; main -> B -> D.  Each branch is depth-first, so the
+    # overall order is: a-only, c-only, b-only, d-only. Verifies that sibling
+    # branches are not interleaved and that nested plugins appear before the
+    # next sibling's plugins.
+    local config="$TPM_TEST_DIR/tmux.conf"
+    local a="$TPM_TEST_DIR/a.conf"
+    local b="$TPM_TEST_DIR/b.conf"
+    local c="$TPM_TEST_DIR/c.conf"
+    local d="$TPM_TEST_DIR/d.conf"
+
+    echo "set -g @plugin 'user/c-only'" > "$c"
+    echo "set -g @plugin 'user/d-only'" > "$d"
+    printf "set -g @plugin 'user/a-only'\nsource-file $c\n" > "$a"
+    printf "set -g @plugin 'user/b-only'\nsource-file $d\n" > "$b"
+    printf "source-file $a\nsource-file $b\n" > "$config"
+
+    run parse_plugins "$config"
+    [ "$status" -eq 0 ]
+    [ "${#lines[@]}" -eq 4 ]
+    [ "${lines[0]}" = "user/a-only" ]
+    [ "${lines[1]}" = "user/c-only" ]
+    [ "${lines[2]}" = "user/b-only" ]
+    [ "${lines[3]}" = "user/d-only" ]
 }

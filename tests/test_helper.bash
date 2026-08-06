@@ -2,6 +2,39 @@
 
 # Test helper functions for TPM Redux tests
 
+# Save the tmux state, in case we are running in an existing tmux session
+_TPM_TEST_SAVED_TMUX=""
+
+setup_tmux_server() {
+    # Save and drop TMUX so the test client does not reuse the host socket.
+    _TPM_TEST_SAVED_TMUX="${TMUX-}"
+    unset TMUX
+
+    if [[ -z "${TMUX_TMPDIR:-}" ]]; then
+        local tmpdir
+        tmpdir="$(mktemp -d)"
+        export TMUX_TMPDIR="$tmpdir"
+    fi
+
+    tmux new-session -d >/dev/null 2>&1 || true
+}
+
+teardown_tmux_server() {
+    # Ensure we don't kill the host tmux server
+    unset TMUX
+
+    if [[ -n "${TMUX_TMPDIR:-}" ]]; then
+        tmux kill-server >/dev/null 2>&1 || true
+        rm -rf "$TMUX_TMPDIR" >/dev/null 2>&1 || true
+        unset TMUX_TMPDIR
+    fi
+
+    if [[ -n "$_TPM_TEST_SAVED_TMUX" ]]; then
+        export TMUX="$_TPM_TEST_SAVED_TMUX"
+    fi
+    _TPM_TEST_SAVED_TMUX=""
+}
+
 # Get the project root directory
 get_project_root() {
     cd "${BATS_TEST_DIRNAME}/.." && pwd
@@ -18,6 +51,11 @@ teardown_temp_dir() {
     if [[ -n "$TPM_TEST_DIR" ]] && [[ -d "$TPM_TEST_DIR" ]]; then
         rm -rf "$TPM_TEST_DIR"
     fi
+}
+
+# Point tmux server at current $HOME -- use when tests override $HOME
+sync_server_home() {
+    tmux set-environment -g HOME "$HOME" >/dev/null 2>&1 || true
 }
 
 # Create a mock tmux.conf file with plugins
